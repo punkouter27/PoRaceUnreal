@@ -62,13 +62,20 @@ def model_numbers(m):
   alone: URLab re-centres their meshes, which moves the drawing, not the physics."""
   T = mujoco.mjtObj
   name = lambda t, i: mujoco.mj_id2name(m, t, i)  # noqa: E731
+  # The creature is the body tree under its root; everything else in the scene (floor, testbed cubes) is "optional":
+  # written when the model has it, skipped quietly on a track that does not.
+  root = mujoco.mj_name2id(m, T.mjOBJ_BODY, G.ROOT_BODY)
+  mine = lambda b: int(m.body_rootid[b]) == root  # noqa: E731
+  opt = lambda b: {} if mine(b) else {"optional": True}  # noqa: E731
   bodies = {name(T.mjOBJ_BODY, b): {"mass": float(m.body_mass[b]), "inertia": floats(m.body_inertia[b]), "ipos": floats(m.body_ipos[b]),
-                                    "iquat": floats(m.body_iquat[b]), "pos": floats(m.body_pos[b]), "quat": floats(m.body_quat[b])}
+                                    "iquat": floats(m.body_iquat[b]), "pos": floats(m.body_pos[b]), "quat": floats(m.body_quat[b]), **opt(b)}
             for b in range(1, m.nbody)}
+  for k in ("pos", "quat"):   # a free body's pose is its joint's state: on a track the race places it, not the card
+    bodies[G.ROOT_BODY].pop(k)
   joints = []
   for j in range(m.njnt):
     d0, nd = int(m.jnt_dofadr[j]), {0: 6, 1: 3}.get(int(m.jnt_type[j]), 1)
-    joints.append({"name": name(T.mjOBJ_JOINT, j) or "", "body": name(T.mjOBJ_BODY, m.jnt_bodyid[j]),
+    joints.append({"name": name(T.mjOBJ_JOINT, j) or "", "body": name(T.mjOBJ_BODY, m.jnt_bodyid[j]), **opt(m.jnt_bodyid[j]),
                    "range": floats(m.jnt_range[j]), "pos": floats(m.jnt_pos[j]), "axis": floats(m.jnt_axis[j]),
                    "stiffness": float(m.jnt_stiffness[j]), "margin": float(m.jnt_margin[j]),
                    "solref": floats(m.jnt_solref[j]), "solimp": floats(m.jnt_solimp[j]),
@@ -83,6 +90,15 @@ def model_numbers(m):
   for g in range(m.ngeom):
     b = int(m.geom_bodyid[g])
     k = seen.get(b, 0); seen[b] = k + 1
+    if not mine(b):
+      # world and testbed geoms (floor, cubes): optional, by name. On a track the track fingerprint owns the world.
+      gname = name(T.mjOBJ_GEOM, g)
+      if gname:
+        geoms.append({"name": gname, "optional": True, "type": int(m.geom_type[g]), "pos": floats(m.geom_pos[g]),
+                      "quat": floats(m.geom_quat[g]), "size": floats(m.geom_size[g]), "friction": floats(m.geom_friction[g]),
+                      "margin": float(m.geom_margin[g]), "gap": float(m.geom_gap[g]), "solref": floats(m.geom_solref[g]),
+                      "solimp": floats(m.geom_solimp[g]), "solmix": float(m.geom_solmix[g])})
+      continue
     if not (m.geom_contype[g] or m.geom_conaffinity[g]):
       # visual only: just the margin and gap (they feed body_margin, which the broadphase reads); never the pose,
       # which URLab's re-centred mesh needs

@@ -10,7 +10,7 @@
 [CmdletBinding()]
 param(
     [switch]$Unreal,          # also build the editor and run the Unreal parity gate
-    [string]$Only = ""        # run one group: salvage | contract | brains | parity
+    [string]$Only = ""        # run one group: salvage | contract | brains | race | parity
 )
 
 $ErrorActionPreference = "Continue"
@@ -37,12 +37,19 @@ try {
     Step "salvage" "Salvaged brains, models and cards load" { & uv @Py (Join-Path $Root "tools\salvage_check.py") }
     Step "contract" "Generated contract files are up to date" { & uv @Py contract.py --check }
     Step "brains" "Go2 brains pass their rungs on this MuJoCo" { & uv @Py version_check.py }
+    Step "race" "Reference race: Planar Sprint seed 1 finishes, and after a flip at 20 s" {
+        & uv @Py race.py planar_sprint --seed 1
+        if ($LASTEXITCODE -eq 0) { & uv @Py race.py planar_sprint --seed 1 --flip-at 20 }
+    }
     if ($Unreal -or $Only -eq "parity") {
         Step "parity" "Editor build" {
             & (Join-Path $UeRoot "Engine\Build\BatchFiles\Build.bat") PoRaceUnrealEditor Win64 Development `
                 -Project="$(Join-Path $Root 'PoRaceUnreal.uproject')" -WaitMutex -NoHotReloadFromIDE | Select-Object -Last 15
         }
         Step "parity" "Unreal moves the Go2 as MuJoCo does (hold, replay, policy)" { & uv @Py parity_check.py run }
+        Step "parity" "Unreal races match the reference race (Planar Sprint seeds 1-5)" {
+            & powershell -ExecutionPolicy Bypass -File (Join-Path $Root "Scripts/regress.ps1") -Track planar_sprint -Seeds 1,2,3,4,5
+        }
     }
 } finally { Pop-Location }
 

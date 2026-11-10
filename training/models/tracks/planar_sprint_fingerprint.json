@@ -1,0 +1,201 @@
+{
+ "track": "planar_sprint",
+ "model": "training/assets/tracks/planar_sprint.xml",
+ "option": {
+  "timestep": 0.004,
+  "impratio": 100.0,
+  "tolerance": 1e-08,
+  "ls_tolerance": 0.01,
+  "noslip_tolerance": 1e-06,
+  "ccd_tolerance": 1e-06,
+  "density": 0.0,
+  "viscosity": 0.0,
+  "o_margin": 0.0,
+  "integrator": 0,
+  "cone": 0,
+  "jacobian": 2,
+  "solver": 2,
+  "iterations": 1,
+  "ls_iterations": 5,
+  "noslip_iterations": 0,
+  "ccd_iterations": 35,
+  "disableflags": 32768,
+  "enableflags": 0,
+  "sdf_initpoints": 40,
+  "sdf_iterations": 10,
+  "gravity": [
+   0.0,
+   0.0,
+   -9.81
+  ],
+  "wind": [
+   0.0,
+   0.0,
+   0.0
+  ],
+  "magnetic": [
+   0.0,
+   -0.5,
+   0.0
+  ],
+  "o_solref": [
+   0.02,
+   1.0
+  ],
+  "o_solimp": [
+   0.9,
+   0.95,
+   0.001,
+   0.5,
+   2.0
+  ],
+  "o_friction": [
+   1.0,
+   1.0,
+   0.005,
+   0.0001,
+   0.0001
+  ]
+ },
+ "world": {
+  "geoms": [
+   {
+    "name": "floor",
+    "type": 0,
+    "pos": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "quat": [
+     1.0,
+     0.0,
+     0.0,
+     0.0
+    ],
+    "size": [
+     0.0,
+     0.0,
+     0.01
+    ],
+    "friction": [
+     0.6,
+     0.005,
+     0.0001
+    ],
+    "margin": 0.0,
+    "gap": 0.0,
+    "solref": [
+     0.02,
+     1.0
+    ],
+    "solimp": [
+     0.9,
+     0.95,
+     0.001,
+     0.5,
+     2.0
+    ],
+    "solmix": 1.0
+   },
+   {
+    "name": "rail_L0",
+    "type": 6,
+    "pos": [
+     50.0,
+     1.65,
+     0.15
+    ],
+    "quat": [
+     1.0,
+     0.0,
+     0.0,
+     0.0
+    ],
+    "size": [
+     56.06,
+     0.05,
+     0.15
+    ],
+    "friction": [
+     1.0,
+     0.005,
+     0.0001
+    ],
+    "margin": 0.0,
+    "gap": 0.0,
+    "solref": [
+     0.02,
+     1.0
+    ],
+    "solimp": [
+     0.9,
+     0.95,
+     0.001,
+     0.5,
+     2.0
+    ],
+    "solmix": 1.0
+   },
+   {
+    "name": "rail_R0",
+    "type": 6,
+    "pos": [
+     50.0,
+     -1.65,
+     0.15
+    ],
+    "quat": [
+     1.0,
+     0.0,
+     0.0,
+     0.0
+    ],
+    "size": [
+     56.06,
+     0.05,
+     0.15
+    ],
+    "friction": [
+     1.0,
+     0.005,
+     0.0001
+    ],
+    "margin": 0.0,
+    "gap": 0.0,
+    "solref": [
+     0.02,
+     1.0
+    ],
+    "solimp": [
+     0.9,
+     0.95,
+     0.001,
+     0.5,
+     2.0
+    ],
+    "solmix": 1.0
+   }
+  ]
+ },
+ "racers": [
+  {
+   "name": "Blue",
+   "card": "go2",
+   "prefix": "blue_",
+   "creature": "go2",
+   "fingerprint": "training/models/go2_fingerprint.json",
+   "color": [
+    0.25,
+    0.5,
+    1.0
+   ],
+   "cruise": 1.5,
+   "maxYawRate": 1.2,
+   "homeHeight": 0.27,
+   "usesUnstick": true,
+   "brain": "go2_loco",
+   "getupBrain": "go2_getup"
+  }
+ ]
+}

@@ -4,25 +4,56 @@
 #include <atomic>
 #include "GameFramework/GameModeBase.h"
 #include "MuJoCo/Components/Controllers/MjArticulationController.h"
+#include "RaceRules.h"
 #include "RacerController.generated.h"
 
 class UNNEModelData;
-namespace UE::NNE { class IModelInstanceCPU; }
 
 UENUM(BlueprintType)
 enum class ERaceControlMode : uint8
 {
-	Policy,	// the ONNX brain through NNE, every 5th physics step (training/go2/sim.py)
-	Replay	// a recorded control stream played back, qpos dumped every step (the parity gate)
+	Policy,	// brains drive the racers (a race, or the testbed's single Go2)
+	Replay	// testbed: a recorded control stream played back, qpos dumped every step (the parity gate)
+};
+
+/** One racer as the HUD and the camera see it (copied from the physics thread under a lock). */
+struct FRaceHudRow
+{
+	FString Name;
+	FLinearColor Color = FLinearColor::White;
+	double Distance = 0.0, FinishTime = -1.0, Speed = 0.0;
+	int32 Lap = 0, Place = 0, BaseBody = -1;
+	ERacerState State = ERacerState::Racing;
+	bool bGettingUp = false;
+	FVector PosUE = FVector::ZeroVector;	// base body, Unreal cm
+};
+
+struct FRaceHud
+{
+	bool bRace = false;
+	FString Track;
+	int32 Laps = 1;
+	uint64 Seed = 0;
+	double Total = 0.0;
+	ERacePhase Phase = ERacePhase::Countdown;
+	double CountdownLeft = 0.0, RaceTime = 0.0;
+	int64 Steps = 0;
+	FVector TangentUE = FVector::ForwardVector;	// track direction at the pack's mean distance
+	TArray<FRaceHudRow> Rows;					// standings order
+	FString Result;								// the result line once the race is over
 };
 
 /**
- * Drives the Go2 in a URLab articulation, on the physics thread. It mirrors training/go2/sim.py line for line:
- * the same observation, action map and timing, so a brain behaves here as it did in training.
+ * The controller of a URLab articulation, on the physics thread. Two jobs:
+ *  - a track model (TrackFingerprint set): every racer of the roster and the race rules (RaceRules.h), one step
+ *    before each mj_step, exactly as training/race.py steps them;
+ *  - the parity testbed (TrackFingerprint empty): one Go2, replayed or driven by its brain, recorded for
+ *    training/parity_check.py.
  *
- * Command line (parity checks, training/parity_check.py drives these):
- *   -RaceMode=Replay|Policy   -RaceReplay=<json>   -RaceDump=<json>   -RaceBrain=<onnx>
- *   -RaceCommand=vx,vy,wz     -RaceRecord=<seconds>   -RaceQuit   -RaceBasicCpu
+ * Command line:
+ *   race     -RaceTest  -Seed=<n>  -Laps=<n>  -RaceFlipAt=<s>
+ *   testbed  -RaceMode=Replay|Policy  -RaceReplay=<json>  -RaceDump=<json>  -RaceBrain=<onnx>  -RaceCommand=vx,vy,wz
+ *            -RaceRecord=<seconds>  -RaceQuit
  */
 UCLASS(ClassGroup = (PoRace), meta = (BlueprintSpawnableComponent))
 class PORACEUNREAL_API URacerController : public UMjArticulationController
@@ -33,70 +64,86 @@ public:
 	UPROPERTY(EditAnywhere, Category = "PoRace")
 	ERaceControlMode Mode = ERaceControlMode::Policy;
 
-	/** The model as training built it: solver options, names, home pose (training/contract.py writes it). */
-	UPROPERTY(EditAnywhere, Category = "PoRace")
+	/** A track's fingerprint (training/build_track_model.py): options, the world's numbers and the racer roster. */
+	UPROPERTY(EditAnywhere, Category = "PoRace|Race")
+	FString TrackFingerprint;
+
+	/** Testbed: the creature's fingerprint (training/contract.py). */
+	UPROPERTY(EditAnywhere, Category = "PoRace|Testbed")
 	FString Fingerprint = TEXT("training/models/go2_fingerprint.json");
 
-	/** Policy: the brain (an imported .onnx). `-RaceBrain=<.onnx>` loads a file instead. */
-	UPROPERTY(EditAnywhere, Category = "PoRace")
+	/** Testbed: the locomotion brain (an imported .onnx). `-RaceBrain=<.onnx>` loads a file instead. */
+	UPROPERTY(EditAnywhere, Category = "PoRace|Testbed")
 	TObjectPtr<UNNEModelData> Brain;
 
-	/** Policy: the commanded velocity (vx m/s, vy m/s, yaw rate rad/s), slewed as in training. `-RaceCommand=` overrides. */
-	UPROPERTY(EditAnywhere, Category = "PoRace")
+	/** Testbed: the commanded velocity (vx m/s, vy m/s, yaw rate rad/s). `-RaceCommand=` overrides. */
+	UPROPERTY(EditAnywhere, Category = "PoRace|Testbed")
 	FVector Command = FVector(0.5, 0.0, 0.0);
 
-	/** Replay: the control stream from training/parity_check.py, relative to the project dir. */
-	UPROPERTY(EditAnywhere, Category = "PoRace")
+	UPROPERTY(EditAnywhere, Category = "PoRace|Testbed")
 	FString ReplayFile;
 
-	/** Where the recorded qpos goes (replay, or policy with -RaceRecord). */
-	UPROPERTY(EditAnywhere, Category = "PoRace")
+	UPROPERTY(EditAnywhere, Category = "PoRace|Testbed")
 	FString DumpFile = TEXT("Saved/PoRace/parity_ue.json");
 
 	virtual void Bind(mjModel* m, mjData* d, const TMap<int32, UMjActuator*>& ActuatorIdMap) override;
 	virtual void ComputeAndApply(mjModel* m, mjData* d, uint8 Source) override;
 	virtual FString GetKindName() const override { return TEXT("porace"); }
 
-	/** Physics steps since the level bound (the HUD's step counter). */
-	int64 Steps() const { return StepCount.load(std::memory_order_relaxed); }
+	/** Thread-safe copy of the race for the HUD and the camera. */
+	void GetHud(FRaceHud& Out) const { FScopeLock L(&HudLock); Out = Hud; }
+
+	/** -RaceTest: checks outside the controller (ARaceDirector) that failed; the test then exits 3. */
+	static std::atomic<int32> CheckFailures;
+
+	/** Game thread (ARaceDirector's first tick): frames are being drawn, so the race may start. Until then the
+	 *  controller leaves the model alone; the race's first step resets it completely (FRaceRules::Setup), so the
+	 *  wait changes nothing. Without it, a slow first frame (the editor binary scans its asset registry for a minute
+	 *  before drawing) ran the countdown, and most of the race, before anyone could see it. */
+	void MarkGameReady() { bGameReady.store(true, std::memory_order_release); }
+
+	/** The level's race controller: the one on a live actor of World (never a stale Blueprint copy). */
+	static URacerController* Find(const UWorld* World);
 
 private:
-	// --- the model, resolved once in Bind
-	TArray<int32> Act, Qadr, Vadr;		// the 12 motors and their joints, contract order
-	int32 ImuSite = -1, AdrLinvel = -1, AdrGyro = -1;
-	TArray<TPair<int32, double>> Home;	// (qpos address, value): the start pose
-	TArray<int32> DumpSlots;			// qpos addresses in the fingerprint's order: the dump's column order
-	bool bReady = false;
+	bool bReady = false, bRace = false, bTest = false, bStarted = false, bReported = false;
+	std::atomic<bool> bGameReady = false;
+	double WaitLogAt = 0.0;
+	TArray<TUniquePtr<FGo2Racer>> Racers;
+	FRaceRules Rules;
+	int32 RequestedLaps = 0;
 
-	// --- brain
-	TSharedPtr<UE::NNE::IModelInstanceCPU> Net;
-	int32 NumIn = 0;
 	UPROPERTY(Transient)
 	TArray<TObjectPtr<UNNEModelData>> LoadedBrains;	// brains loaded from files, kept alive here
-	TArray<float> LastAction, Action, Obs;
-	float Cmd[3] = {};					// the slewed command
-	bool MakeNet(UNNEModelData* Data);
-	void Decide(const mjModel* m, mjData* d);
+	UNNEModelData* LoadBrainFile(const FString& Path);
 
-	// --- replay and recording
-	TArray<int32> ReplayAct;
-	TArray<double> ReplayCtrl;			// control steps x ReplayAct.Num()
-	int64 RecordSteps = 0;				// physics steps to record (0 = not recording)
-	TArray<double> Recorded;			// qpos before each step, DumpSlots order
-	TArray<float> RecordedObs, RecordedAct;	// per decision (policy)
+	bool BindRace(mjModel* m, mjData* d);
+	bool BindTestbed(mjModel* m, mjData* d);
+
+	// testbed: replay and recording
+	TArray<TPair<int32, double>> Home;
+	TArray<int32> DumpSlots, ReplayAct;
+	TArray<double> ReplayCtrl, Recorded;
+	TArray<float> RecordedObs, RecordedAct;
+	int64 RecordSteps = 0;
 	bool bQuitWhenDone = false, bDumped = false;
 	void StartPose(const mjModel* m, mjData* d) const;
 	void WriteDump(const mjModel* m);
 
+	mutable FCriticalSection HudLock;
+	FRaceHud Hud;
+	void PublishHud(const mjData* d);
+	void Finish();
+
 	std::atomic<int64> StepCount = 0;
 };
 
-/** Nothing to possess: MuJoCo owns the racers, the cameras are placed by the level. */
+/** Nothing to possess: MuJoCo owns the racers; the HUD draws the race and ARaceDirector moves the camera. */
 UCLASS()
 class PORACEUNREAL_API ARaceGameMode : public AGameModeBase
 {
 	GENERATED_BODY()
 
 public:
-	ARaceGameMode() { DefaultPawnClass = nullptr; }
+	ARaceGameMode();
 };

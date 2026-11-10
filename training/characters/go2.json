@@ -14,5 +14,30 @@
   "a": 1
  },
  "cameraHeight": 0.3,
- "traits": null
+ "traits": null,
+ "racerName": "Blue",
+ "racerColor": [
+  0.25,
+  0.5,
+  1.0
+ ],
+ "fingerprint": "training/models/go2_fingerprint.json",
+ "model": "training/assets/go2/go2_porace.xml",
+ "rootBody": "base",
+ "homeHeight": 0.27,
+ "cruise": 1.5,
+ "maxYawRate": 1.2,
+ "usesUnstick": true,
+ "terrains": [
+  "flat",
+  "banked",
+  "steeple"
+ ],
+ "brains": {
+  "flat": "go2_loco",
+  "banked": "go2_loco_steeple",
+  "steeple": "go2_loco_steeple",
+  "getup": "go2_getup"
+ },
+ "_brains_note": "Locomotion brain per track terrain, as the Unity TrackBuilder assigned them (banked and steeple both run the graduated steeple brain s7; go2_loco_bank r7 is the fallback). Files: training/models/brains/<name>.onnx."
 }

@@ -32,12 +32,14 @@ Plan approved 2026-11-10.
 - [ ] 1.10b Runtime no-Chaos assert (the testbed script turns Chaos off; nothing checks it at run time yet): moved to Slice 2
 
 ## Slice 2 — One race, one racer
-- [ ] 2.1 `training/build_track_model.py` (centre line → rails) and `Scripts/build_track.py`
-- [ ] 2.2 `training/race.py` reference: countdown, steering, splits, finish
-- [ ] 2.3 `URaceOrchestrator` (same rules), `UTrackDefinition`
-- [ ] 2.4 Get-up switch, `URaceAutoReset`
-- [ ] 2.5 `-RaceTest` result line, `Scripts/regress.ps1`
-- [ ] 2.6 Build stamp on the HUD
+- [x] 2.0 (from 1.4b, 1.10b) Coordinate marker check and run-time no-Chaos check, every race test (`ARaceDirector`)
+- [x] 2.1 `training/build_track_model.py` (centre line → rails, racers attached with a name prefix) and `Scripts/build_track.py` (`/Game/Levels/L_PlanarSprint`)
+- [x] 2.2 `training/race.py` + `training/racelib/` reference: countdown, steering, checkpoints, un-stick, off-track, finish. Split times moved to 7.4 (gate timing)
+- [x] 2.3 `FRaceRules` + `FRaceTrack` in Unreal, run by `URacerController` on the physics thread (one controller per track model: URLab calls one per articulation)
+- [x] 2.4 Get-up switch and auto-reset (`FGo2Racer`); flip test passes in both runtimes
+- [x] 2.5 `-RaceTest` result line, `Scripts/regress.ps1`: seeds 1–5 identical to Python on the same model, within 0.66 % of the track file
+- [x] 2.6 HUD: track, standings, race time, countdown, fps / physics Hz, build stamp `v0.1.0 YYMMDD`
+- [x] 2.7 The race waits for the first drawn frame (a slow first frame used to swallow the countdown)
 
 ## Slice 3 — Matt and mixed fields
 - [ ] 3.1 Matt MJCF import, `HumanBrain`, parity gates
@@ -70,7 +72,7 @@ Plan approved 2026-11-10.
 - [ ] 7.1 `URaceSensors`, `UContactImpulse`, `UStrainMonitor`
 - [ ] 7.2 `URaceDirector` and manual camera
 - [ ] 7.3 Wobble warning, recovery countdown
-- [ ] 7.4 `UGateTiming`
+- [ ] 7.4 `UGateTiming` (also the split times from 2.2)
 - [ ] 7.5 Intent markers, `UPipCam`, `UCommentary`
 - [ ] 7.6 Telemetry corner
 

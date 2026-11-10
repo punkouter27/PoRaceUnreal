@@ -9,7 +9,7 @@ public class PoRaceUnreal : ModuleRules
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "URLab" });
-		PrivateDependencyModuleNames.AddRange(new string[] { "NNE", "Json" });
+		PrivateDependencyModuleNames.AddRange(new string[] { "NNE", "Json", "Slate", "SlateCore" });
 
 		// Build stamp YYMMDD (AGENTS.md): last git commit date, else today.
 		string Stamp = DateTime.Now.ToString("yyMMdd");
