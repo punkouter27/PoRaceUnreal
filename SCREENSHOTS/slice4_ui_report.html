@@ -1,0 +1,110 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Slice 4 UI report</title><style>
+:root { --bg:#14161b; --ink:#e8e8ec; --dim:#9a9aa4; --gold:#ffd040; --panel:#1d2027; }
+body { margin:0; padding:16px; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui,sans-serif; }
+h1 { color:var(--gold); margin:0 0 4px; } h2 { margin:28px 0 4px; } p { color:var(--dim); max-width:900px; }
+.pair, .row { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-start; }
+figure { margin:0; flex:1 1 300px; max-width:640px; } img { width:100%; border-radius:8px; border:1px solid #333; }
+.row figure { flex:1 1 200px; } figcaption { color:var(--dim); font-size:13px; }
+.missing { padding:40px; text-align:center; background:var(--panel); border-radius:8px; color:var(--dim); }
+pre { background:var(--panel); padding:12px; border-radius:8px; overflow-x:auto; font-size:12px; }
+</style></head><body>
+<h1>PoRace — Slice 4 UI report</h1><p>The game loop in Unreal: menu, racer intro, countdown, race, results. Unity screens on the left, Unreal on the right.
+Captured by the UI test (<code>-RaceUiTest -AutoStart=1 -RaceLimit=4 -RaceShots=…</code>), so the results card shows a called race.</p>
+<section><h2>Menu</h2><p>One screen, no scrolling: track, racers (ready and not ready, with the reason), laps, START. START stays off until a racer that may race on the track is picked.</p><div class='pair'><figure><img src="slice4/unity_menu_picked_00_3s.png" alt="Unity"><figcaption>Unity (before)</figcaption></figure><figure><img src="slice4/Menu_1280x720.png" alt="Unreal"><figcaption>Unreal (after)</figcaption></figure></div></section><section><h2>Racer intro</h2><p>A card per racer before the countdown (name, kind, height, mass, brain, this race&#x27;s cruise speed); the camera frames that racer.</p><div class='pair'><figure><img src="slice4/unity_intro_blue.png" alt="Unity"><figcaption>Unity (before)</figcaption></figure><figure><img src="slice4/FlatOval_0_intro_1280x720.png" alt="Unreal"><figcaption>Unreal (after)</figcaption></figure></div></section><section><h2>Countdown</h2><p>The countdown over the grid; top left the track, lap and standings; top right the pause gear.</p><div class='pair'><figure><img src="slice4/unity_countdown.png" alt="Unity"><figcaption>Unity (before)</figcaption></figure><figure><img src="slice4/FlatOval_1_grid_1280x720.png" alt="Unreal"><figcaption>Unreal (after)</figcaption></figure></div></section><section><h2>Racing</h2><p>Chase camera on the pack; build stamp bottom right (Slice 3 capture: the UI test stops at 4 s).</p><div class='pair'><figure><img src="slice4/unity_race_01_14s.png" alt="Unity"><figcaption>Unity (before)</figcaption></figure><figure><img src="slice4/PlanarSprint_2_racing.png" alt="Unreal"><figcaption>Unreal (after)</figcaption></figure></div></section><section><h2>Results</h2><p>The classified order (a called race shows DNF with the distance), then MENU, REMATCH, NEXT TRACK.</p><div class='pair'><figure><img src="slice4/unity_final_results.png" alt="Unity"><figcaption>Unity (before)</figcaption></figure><figure><img src="slice4/FlatOval_5_results_1280x720.png" alt="Unreal"><figcaption>Unreal (after)</figcaption></figure></div></section>
+<h2>Aspect ratios</h2><p>The same screens at 16:9, a 9:19.5 portrait phone (540x1170) and 21:9: the menu, the countdown on the grid and the results card. The layout check (below) asserts every group stays on screen and none overlap.</p>
+<h3>Menu</h3><div class='row'><figure><img src="slice4/Menu_1280x720.png"><figcaption>1280x720</figcaption></figure><figure><img src="slice4/Menu_540x1170.png"><figcaption>540x1170</figcaption></figure><figure><img src="slice4/Menu_1680x720.png"><figcaption>1680x720</figcaption></figure></div><h3>Grid</h3><div class='row'><figure><img src="slice4/FlatOval_1_grid_1280x720.png"><figcaption>1280x720</figcaption></figure><figure><img src="slice4/FlatOval_1_grid_540x1170.png"><figcaption>540x1170</figcaption></figure><figure><img src="slice4/FlatOval_1_grid_1680x720.png"><figcaption>1680x720</figcaption></figure></div><h3>Results</h3><div class='row'><figure><img src="slice4/FlatOval_5_results_1280x720.png"><figcaption>1280x720</figcaption></figure><figure><img src="slice4/FlatOval_5_results_540x1170.png"><figcaption>540x1170</figcaption></figure><figure><img src="slice4/FlatOval_5_results_1680x720.png"><figcaption>1680x720</figcaption></figure></div>
+<h2>Checks</h2><h3>uitest_1280x720.log</h3><pre>[Check] menu tracks: 4 listed, 2 built OK
+[Check] menu racers: 4 listed, 2 ready OK
+[Check] Grandma listed as not ready: Her g14 brain (94/100 at graduation) is not verified on MuJoCo 4.0.0 or in Unreal yet. OK
+[Check] G1 listed as not ready: No race brain yet: the G1 humanoid is started but not onboarded (Unity task E.4). OK
+[Check] Matt refused on Banked Oval: flat tracks only OK
+[Check] START refused with nobody picked (&quot;pick at least one racer&quot;) OK
+[Check] START allowed with Blue on a built track OK
+[Check] menu layout at 1280x720: 2 groups inside the screen, none overlapping OK
+[Check] no Chaos: 0 of 217 primitive components simulate (50 have physics collision, never stepped) OK
+[Check] marker points: origin, 1 m along x, y, z land at (0,0,0) (100,0,0) (0,-100,0) (0,0,100) cm OK
+[Check] marker body Blue: drawn 0.000 cm from MuJoCo&#x27;s base position X=499.248 Y=40.008 Z=27.189 (on the grid, 0.50 cm allowed) OK
+[Check] marker body Matt: drawn 0.003 cm from MuJoCo&#x27;s base position X=498.100 Y=-38.811 Z=81.888 (on the grid, 0.50 cm allowed) OK
+[Check] race layout at 1280x720: 4 groups inside the screen, none overlapping OK
+[Loop] 1: DNF map=Flat Oval laps=2 length=195.2m seed=40419 | Blue DNF@5m lane=-0.4 v=1.45 resets=0 offtrack=0 unstuck=0 falls=0 passes=0 | Matt DNF@4m lane=0.4 v=1.50 resets=0 offtrack=0 unstuck=0 falls=0 passes=0 | flips=0 | memory 2845 MB (+0 MB since the first race)
+[RaceUiTest] done at the results card: 0 check failures</pre><h3>uitest_540x1170.log</h3><pre>[Check] menu tracks: 4 listed, 2 built OK
+[Check] menu racers: 4 listed, 2 ready OK
+[Check] Grandma listed as not ready: Her g14 brain (94/100 at graduation) is not verified on MuJoCo 4.0.0 or in Unreal yet. OK
+[Check] G1 listed as not ready: No race brain yet: the G1 humanoid is started but not onboarded (Unity task E.4). OK
+[Check] Matt refused on Banked Oval: flat tracks only OK
+[Check] START refused with nobody picked (&quot;pick at least one racer&quot;) OK
+[Check] START allowed with Blue on a built track OK
+[Check] menu layout at 540x1170: 2 groups inside the screen, none overlapping OK
+[Check] no Chaos: 0 of 217 primitive components simulate (50 have physics collision, never stepped) OK
+[Check] marker points: origin, 1 m along x, y, z land at (0,0,0) (100,0,0) (0,-100,0) (0,0,100) cm OK
+[Check] marker body Blue: drawn 0.000 cm from MuJoCo&#x27;s base position X=499.248 Y=40.008 Z=27.189 (on the grid, 0.50 cm allowed) OK
+[Check] marker body Matt: drawn 0.003 cm from MuJoCo&#x27;s base position X=498.100 Y=-38.811 Z=81.888 (on the grid, 0.50 cm allowed) OK
+[Check] race layout at 540x1170: 4 groups inside the screen, none overlapping OK
+[Loop] 1: DNF map=Flat Oval laps=2 length=195.2m seed=40659 | Blue DNF@5m lane=-0.4 v=1.49 resets=0 offtrack=0 unstuck=0 falls=0 passes=0 | Matt DNF@4m lane=0.4 v=1.49 resets=0 offtrack=0 unstuck=0 falls=0 passes=0 | flips=0 | memory 2735 MB (+0 MB since the first race)
+[RaceUiTest] done at the results card: 0 check failures</pre><h3>uitest_1680x720.log</h3><pre>[Check] menu tracks: 4 listed, 2 built OK
+[Check] menu racers: 4 listed, 2 ready OK
+[Check] Grandma listed as not ready: Her g14 brain (94/100 at graduation) is not verified on MuJoCo 4.0.0 or in Unreal yet. OK
+[Check] G1 listed as not ready: No race brain yet: the G1 humanoid is started but not onboarded (Unity task E.4). OK
+[Check] Matt refused on Banked Oval: flat tracks only OK
+[Check] START refused with nobody picked (&quot;pick at least one racer&quot;) OK
+[Check] START allowed with Blue on a built track OK
+[Check] menu layout at 1680x720: 2 groups inside the screen, none overlapping OK
+[Check] no Chaos: 0 of 217 primitive components simulate (50 have physics collision, never stepped) OK
+[Check] marker points: origin, 1 m along x, y, z land at (0,0,0) (100,0,0) (0,-100,0) (0,0,100) cm OK
+[Check] marker body Blue: drawn 0.000 cm from MuJoCo&#x27;s base position X=499.248 Y=-39.992 Z=27.189 (on the grid, 0.50 cm allowed) OK
+[Check] marker body Matt: drawn 0.003 cm from MuJoCo&#x27;s base position X=498.100 Y=41.189 Z=81.888 (on the grid, 0.50 cm allowed) OK
+[Check] race layout at 1680x720: 4 groups inside the screen, none overlapping OK
+[Loop] 1: DNF map=Flat Oval laps=2 length=195.2m seed=36493 | Blue DNF@5m lane=0.4 v=1.41 resets=0 offtrack=0 unstuck=0 falls=0 passes=0 | Matt DNF@4m lane=-0.4 v=1.47 resets=0 offtrack=0 unstuck=0 falls=0 passes=0 | flips=0 | memory 2694 MB (+0 MB since the first race)
+[RaceUiTest] done at the results card: 0 check failures</pre><h3>loop10.log</h3><pre>[Check] no Chaos: 0 of 217 primitive components simulate (50 have physics collision, never stepped) OK
+[Check] marker points: origin, 1 m along x, y, z land at (0,0,0) (100,0,0) (0,-100,0) (0,0,100) cm OK
+[Check] marker body Blue: drawn 0.000 cm from MuJoCo&#x27;s base position X=499.248 Y=-39.992 Z=27.189 (on the grid, 0.50 cm allowed) OK
+[Check] marker body Matt: drawn 0.005 cm from MuJoCo&#x27;s base position X=498.100 Y=41.189 Z=81.888 (on the grid, 0.50 cm allowed) OK
+[Loop] 1/10: DNF map=Flat Oval laps=2 length=195.2m seed=49609 | Blue DNF@11m lane=0.4 v=1.50 resets=0 offtrack=0 unstuck=0 falls=0 passes=0 | Matt DNF@10m lane=-0.4 v=1.46 resets=0 offtrack=0 unstuck=0 falls=0 passes=0 | flips=0 | memory 2620 MB (+0 MB since the first race)
+[Check] no Chaos: 0 of 217 primitive components simulate (50 have physics collision, never stepped) OK
+[Check] marker points: origin, 1 m along x, y, z land at (0,0,0) (100,0,0) (0,-100,0) (0,0,100) cm OK
+[Check] marker body Blue: drawn 0.000 cm from MuJoCo&#x27;s base position X=499.248 Y=40.008 Z=27.189 (on the grid, 0.50 cm allowed) OK
+[Check] marker body Matt: drawn 0.003 cm from MuJoCo&#x27;s base position X=498.100 Y=-38.811 Z=81.888 (on the grid, 0.50 cm allowed) OK
+[Loop] 2/10: DNF map=Flat Oval laps=2 length=195.2m seed=12398 | Blue DNF@11m lane=-0.4 v=1.42 resets=0 offtrack=0 unstuck=0 falls=0 passes=0 | Matt DNF@10m lane=0.4 v=1.47 resets=0 offtrack=0 unstuck=0 falls=0 passes=0 | flips=0 | memory 2666 MB (+46 MB since the first race)
+[Check] no Chaos: 0 of 217 primitive components simulate (50 have physics collision, never stepped) OK
+[Check] marker points: origin, 1 m along x, y, z land at (0,0,0) (100,0,0) (0,-100,0) (0,0,100) cm OK
+[Check] marker body Blue: drawn 0.000 cm from MuJoCo&#x27;s base position X=499.248 Y=40.008 Z=27.189 (on the grid, 0.50 cm allowed) OK
+[Check] marker body Matt: drawn 0.005 cm from MuJoCo&#x27;s base position X=498.100 Y=-38.811 Z=81.888 (on the grid, 0.50 cm allowed) OK
+[Loop] 3/10: DNF map=Flat Oval laps=2 length=195.2m seed=41877 | Blue DNF@11m lane=-0.4 v=1.48 resets=0 offtrack=0 unstuck=0 falls=0 passes=0 | Matt DNF@10m lane=0.4 v=1.44 resets=0 offtrack=0 unstuck=0 falls=0 passes=0 | flips=0 | memory 2697 MB (+77 MB since the first race)
+[Check] no Chaos: 0 of 217 primitive components simulate (50 have physics collision, never stepped) OK
+[Check] marker points: origin, 1 m along x, y, z land at (0,0,0) (100,0,0) (0,-100,0) (0,0,100) cm OK
+[Check] marker body Blue: drawn 0.000 cm from MuJoCo&#x27;s base position X=499.248 Y=40.008 Z=27.189 (on the grid, 0.50 cm allowed) OK
+[Check] marker body Matt: drawn 0.003 cm from MuJoCo&#x27;s base position X=498.100 Y=-38.811 Z=81.888 (on the grid, 0.50 cm allowed) OK
+[Loop] 4/10: DNF map=Flat Oval laps=2 length=195.2m seed=24486 | Blue DNF@11m lane=-0.4 v=1.46 resets=0 offtrack=0 unstuck=0 falls=0 passes=0 | Matt DNF@9m lane=0.4 v=1.41 resets=0 offtrack=0 unstuck=0 falls=0 passes=0 | flips=0 | memory 2729 MB (+108 MB since the first race)
+[Check] no Chaos: 0 of 217 primitive components simulate (50 have physics collision, never stepped) OK
+[Check] marker points: origin, 1 m along x, y, z land at (0,0,0) (100,0,0) (0,-100,0) (0,0,100) cm OK
+[Check] marker body Blue: drawn 0.000 cm from MuJoCo&#x27;s base position X=499.248 Y=-39.992 Z=27.189 (on the grid, 0.50 cm allowed) OK
+[Check] marker body Matt: drawn 0.005 cm from MuJoCo&#x27;s base position X=498.100 Y=41.187 Z=81.886 (on the grid, 0.50 cm allowed) OK
+[Loop] 5/10: DNF map=Flat Oval laps=2 length=195.2m seed=14762 | Blue DNF@11m lane=0.4 v=1.48 resets=0 offtrack=0 unstuck=0 falls=0 passes=0 | Matt DNF@9m lane=-0.4 v=1.43 resets=0 offtrack=0 unstuck=0 falls=0 passes=0 | flips=0 | memory 2708 MB (+88 MB since the first race)
+[Check] no Chaos: 0 of 217 primitive components simulate (50 have physics collision, never stepped) OK
+[Check] marker points: origin, 1 m along x, y, z land at (0,0,0) (100,0,0) (0,-100,0) (0,0,100) cm OK
+[Check] marker body Blue: drawn 0.000 cm from MuJoCo&#x27;s base position X=499.248 Y=40.008 Z=27.189 (on the grid, 0.50 cm allowed) OK
+[Check] marker body Matt: drawn 0.003 cm from MuJoCo&#x27;s base position X=498.100 Y=-38.811 Z=81.888 (on the grid, 0.50 cm allowed) OK
+[Loop] 6/10: DNF map=Flat Oval laps=2 length=195.2m seed=41447 | Blue DNF@11m lane=-0.4 v=1.48 resets=0 offtrack=0 unstuck=0 falls=0 passes=0 | Matt DNF@9m lane=0.4 v=1.43 resets=0 offtrack=0 unstuck=0 falls=0 passes=0 | flips=0 | memory 2735 MB (+115 MB since the first race)
+[Check] no Chaos: 0 of 217 primitive components simulate (50 have physics collision, never stepped) OK
+[Check] marker points: origin, 1 m along x, y, z land at (0,0,0) (100,0,0) (0,-100,0) (0,0,100) cm OK
+[Check] marker body Blue: drawn 0.000 cm from MuJoCo&#x27;s base position X=499.248 Y=-39.992 Z=27.189 (on the grid, 0.50 cm allowed) OK
+[Check] marker body Matt: drawn 0.000 cm from MuJoCo&#x27;s base position X=498.100 Y=41.191 Z=81.890 (on the grid, 0.50 cm allowed) OK
+[Loop] 7/10: DNF map=Flat Oval laps=2 length=195.2m seed=63941 | Blue DNF@11m lane=0.4 v=1.42 resets=0 offtrack=0 unstuck=0 falls=0 passes=0 | Matt DNF@10m lane=-0.4 v=1.45 resets=0 offtrack=0 unstuck=0 falls=0 passes=0 | flips=0 | memory 2880 MB (+260 MB since the first race)
+[Check] no Chaos: 0 of 217 primitive components simulate (50 have physics collision, never stepped) OK
+[Check] marker points: origin, 1 m along x, y, z land at (0,0,0) (100,0,0) (0,-100,0) (0,0,100) cm OK
+[Check] marker body Blue: drawn 0.000 cm from MuJoCo&#x27;s base position X=499.248 Y=40.008 Z=27.189 (on the grid, 0.50 cm allowed) OK
+[Check] marker body Matt: drawn 0.003 cm from MuJoCo&#x27;s base position X=498.100 Y=-38.811 Z=81.888 (on the grid, 0.50 cm allowed) OK
+[Loop] 8/10: DNF map=Flat Oval laps=2 length=195.2m seed=27460 | Blue DNF@11m lane=-0.4 v=1.46 resets=0 offtrack=0 unstuck=0 falls=0 passes=0 | Matt DNF@10m lane=0.4 v=1.45 resets=0 offtrack=0 unstuck=0 falls=0 passes=0 | flips=0 | memory 2896 MB (+276 MB since the first race)
+[Check] no Chaos: 0 of 217 primitive components simulate (50 have physics collision, never stepped) OK
+[Check] marker points: origin, 1 m along x, y, z land at (0,0,0) (100,0,0) (0,-100,0) (0,0,100) cm OK
+[Check] marker body Blue: drawn 0.000 cm from MuJoCo&#x27;s base position X=499.248 Y=-39.992 Z=27.189 (on the grid, 0.50 cm allowed) OK
+[Check] marker body Matt: drawn 0.003 cm from MuJoCo&#x27;s base position X=498.100 Y=41.189 Z=81.888 (on the grid, 0.50 cm allowed) OK
+[Loop] 9/10: DNF map=Flat Oval laps=2 length=195.2m seed=21392 | Blue DNF@11m lane=0.4 v=1.45 resets=0 offtrack=0 unstuck=0 falls=0 passes=0 | Matt DNF@10m lane=-0.4 v=1.45 resets=0 offtrack=0 unstuck=0 falls=0 passes=0 | flips=0 | memory 2922 MB (+302 MB since the first race)
+[Check] no Chaos: 0 of 217 primitive components simulate (50 have physics collision, never stepped) OK
+[Check] marker points: origin, 1 m along x, y, z land at (0,0,0) (100,0,0) (0,-100,0) (0,0,100) cm OK
+[Check] marker body Blue: drawn 0.000 cm from MuJoCo&#x27;s base position X=499.248 Y=40.008 Z=27.189 (on the grid, 0.50 cm allowed) OK
+[Check] marker body Matt: drawn 0.000 cm from MuJoCo&#x27;s base position X=498.100 Y=-38.809 Z=81.890 (on the grid, 0.50 cm allowed) OK
+[Loop] 10/10: DNF map=Flat Oval laps=2 length=195.2m seed=35783 | Blue DNF@11m lane=-0.4 v=1.42 resets=0 offtrack=0 unstuck=0 falls=0 passes=0 | Matt DNF@10m lane=0.4 v=1.49 resets=0 offtrack=0 unstuck=0 falls=0 passes=0 | flips=0 | memory 2935 MB (+315 MB since the first race)
+[AutoLoops] 10 races done, 0 check failures</pre>
+</body></html>

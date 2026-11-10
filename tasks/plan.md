@@ -1,6 +1,6 @@
 # PoRaceUnreal — Vertical-slice plan
 
-Status: approved 2026-11-10. Slices 0–3 done (reports: `docs/20261110/slice1.md`, `slice2.md`, `slice3.md`). Requirements: `docs/PRD.md`. Design: `SPEC.md`. Checklist: `tasks/todo.md`.
+Status: approved 2026-11-10. Slices 0–4 done (reports: `docs/20261110/slice1.md` … `slice4.md`). Requirements: `docs/PRD.md`. Design: `SPEC.md`. Checklist: `tasks/todo.md`.
 
 Each slice ends with something that runs and a check that passes. A slice does not start until the one before it passes. "Blast radius" names what a slice can break.
 

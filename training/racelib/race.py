@@ -65,11 +65,16 @@ class Race:
   laps: int = 1
   flip_at: float = -1.0
   randomize_grid: bool = True
+  intro_steps: int = 0          # racers stand on the grid this long before the countdown (the HUD's racer intro)
+  finish_window_steps: int = 0  # interactive: the race is called this long after the winner (0: off, as in tests)
+  limit_steps: int = TEST_LIMIT_STEPS   # the race is called this long after the start
   phase: str = COUNTDOWN
   step: int = 0
   race_start: int = -1
   finished: int = 0
   flips: int = 0
+  called: bool = False          # ended by the finish window or the limit: the rest are classified by distance
+  first_finish: int = -1
   events: list = field(default_factory=list)
   parked: list = field(default_factory=list)   # racers of the track model not on the grid: held still off the track
 
@@ -158,7 +163,7 @@ class Race:
   # --- one physics step ----------------------------------------------------------------------------------------------
   def pre_step(self):
     """The rules for this step. Call before mj_step; then each racer's control(), then mj_step."""
-    if self.phase == COUNTDOWN and self.step >= COUNTDOWN_STEPS:
+    if self.phase == COUNTDOWN and self.step >= self.intro_steps + COUNTDOWN_STEPS:
       self.phase = RACING_PHASE
       self.race_start = self.step
     rt = self.race_time()
@@ -195,6 +200,8 @@ class Race:
         e.finish_time = rt
         self.finished += 1
         e.place = self.finished
+        if self.first_finish < 0:
+          self.first_finish = self.step
         r.target[:] = 0
         continue
       cp = math.floor(dist / self.track.checkpoint_spacing)
@@ -228,6 +235,10 @@ class Race:
 
     if self.phase == RACING_PHASE and self.finished == len(self.entries):
       self.phase = FINISHED
+    elif self.phase == RACING_PHASE and ((self.finish_window_steps > 0 and self.first_finish >= 0 and self.step - self.first_finish >= self.finish_window_steps)
+                                         or self.step - self.race_start >= self.limit_steps):
+      self.phase = FINISHED
+      self.called = True
 
   def control(self):
     for e in self.entries:
@@ -236,15 +247,15 @@ class Race:
 
   @property
   def over(self):
-    return self.phase == FINISHED or (self.race_start >= 0 and self.step - self.race_start > TEST_LIMIT_STEPS)
+    return self.phase == FINISHED
 
   def result_line(self):
     """One line per race, the Unity -raceTest format, so old and new results diff."""
-    ok = self.phase == FINISHED
+    ok = self.phase == FINISHED and not self.called
     rows = []
     for e in self.standings():
       t = f"{e.finish_time:.2f}s" if e.finish_time >= 0 else f"DNF@{e.distance:.0f}m"
       rows.append(f"{e.name} {t} lane={e.lane:.1f} v={e.speed:.2f} resets={e.racer.resets} offtrack={e.off_track} "
                   f"unstuck={e.unsticks}{f' backoffs={e.backoffs}' if e.backoffs else ''} falls={e.falls} passes={e.passes}")
-    return (f"{'FINISHED' if ok else 'DNF'} map={self.track.name} laps={self.laps} length={self.total:.1f}m seed={self.seed} | "
+    return (f"{'FINISHED' if ok else 'CALLED' if self.called and self.finished else 'DNF'} map={self.track.name} laps={self.laps} length={self.total:.1f}m seed={self.seed} | "
             + " | ".join(rows) + f" | flips={self.flips}")

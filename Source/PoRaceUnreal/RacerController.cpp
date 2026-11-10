@@ -27,6 +27,7 @@ ARaceGameMode::ARaceGameMode()
 {
 	DefaultPawnClass = nullptr;
 	HUDClass = ARaceHUD::StaticClass();
+	PlayerControllerClass = ARacePlayerController::StaticClass();
 }
 
 namespace
@@ -90,17 +91,33 @@ void URacerController::Bind(mjModel* m, mjData* d, const TMap<int32, UMjActuator
 
 bool URacerController::BindRace(mjModel* m, mjData* d)
 {
+	// Options: the level URL the menu opened (?Racers=blue,matt?Laps=2?Seed=7), then the command line (tests) over it
 	const TCHAR* Cmd = FCommandLine::Get();
+	const FURL* Url = GetWorld() ? &GetWorld()->URL : nullptr;
+	auto Opt = [&](const TCHAR* Key, FString& Out) -> bool	// Key without '=': "Racers"
+	{
+		bool bFound = false;
+		if (Url && Url->HasOption(Key)) { Out = Url->GetOption(*(FString(Key) + TEXT("=")), TEXT("")); bFound = true; }
+		FString V;
+		if (FParse::Value(Cmd, *(FString(Key) + TEXT("=")), V, false)) { Out = V; bFound = true; }
+		return bFound;
+	};
 	bTest = FParse::Param(Cmd, TEXT("RaceTest"));
+	FString S;
 	uint64 Seed = (uint64)(FDateTime::Now().GetTicks() & 0xFFFF);
-	FParse::Value(Cmd, TEXT("Seed="), Seed);
-	RequestedLaps = 0;
-	FParse::Value(Cmd, TEXT("Laps="), RequestedLaps);
-	double FlipAt = -1.0;
-	FParse::Value(Cmd, TEXT("RaceFlipAt="), FlipAt);
-	FString Picks;	// -Racers=blue,matt: who is on the grid (default every racer of the track model)
-	TArray<FString> Want;
-	if (FParse::Value(Cmd, TEXT("Racers="), Picks, false)) Picks.ToLower().ParseIntoArray(Want, TEXT(","));
+	if (Opt(TEXT("Seed"), S) && FCString::Atoi64(*S) >= 0) Seed = (uint64)FCString::Atoi64(*S);
+	RequestedLaps = Opt(TEXT("Laps"), S) ? FCString::Atoi(*S) : 0;
+	const double FlipAt = Opt(TEXT("RaceFlipAt"), S) ? FCString::Atod(*S) : -1.0;
+	TArray<FString> Want;	// Racers=blue,matt: who is on the grid (default every racer of the track model)
+	if (Opt(TEXT("Racers"), S)) S.ToLower().ParseIntoArray(Want, TEXT(","));
+	// interactive defaults: a racer intro of 2.5 s per racer and the race called 60 s after the winner; a race test has
+	// neither unless asked (the reference races and their results stay as they were)
+	IntroSeconds = Opt(TEXT("Intro"), S) ? FCString::Atod(*S) : -1.0;	// < 0: 2.5 s per racer, or 0 in a test
+	const double Window = Opt(TEXT("FinishWindow"), S) ? FCString::Atod(*S) : bTest ? 0.0 : 60.0;
+	bExplicitLimit = Opt(TEXT("RaceLimit"), S);
+	const double Limit = bExplicitLimit ? FCString::Atod(*S) : 600.0;
+	Rules.FinishWindowSteps = FMath::RoundToInt64(Window / FRaceRules::Dt);
+	Rules.LimitSteps = FMath::RoundToInt64(Limit / FRaceRules::Dt);
 
 	const TSharedPtr<FJsonObject> Fp = Race::LoadJson(TrackFingerprint);
 	if (!Fp) return false;
@@ -177,6 +194,8 @@ bool URacerController::BindRace(mjModel* m, mjData* d)
 	const FString Bound = RaceModel::Save(m, *FString::Printf(TEXT("model_bound_%s.mjb"), *TrackId));	// per track: parallel race tests
 	Rules.Seed = Seed;
 	Rules.FlipAt = FlipAt;
+	const double Intro = IntroSeconds >= 0.0 ? IntroSeconds : bTest ? 0.0 : 2.5 * Rules.Entries.Num();
+	Rules.IntroSteps = FMath::RoundToInt64(Intro / FRaceRules::Dt);
 	UE_LOG(LogRace, Log, TEXT("MuJoCo %s, track %s (%.1f m, %s), %d racers, seed %llu, %d names missing; bound model %s"),
 		UTF8_TO_TCHAR(mj_versionString()), *Rules.Track.Name, Rules.Track.Length, *Rules.Track.Terrain, Rules.Entries.Num(), Seed, Missing, *Bound);
 	return bOk && Missing == 0 && Rules.Entries.Num() > 0;
@@ -192,6 +211,10 @@ void URacerController::PublishHud(const mjData* d)
 	Hud.Total = Rules.Total;
 	Hud.Phase = Rules.Phase;
 	Hud.CountdownLeft = Rules.CountdownLeft();
+	Hud.IntroLeft = Rules.IntroLeft();
+	Hud.IntroSeconds = (double)Rules.IntroSteps * FRaceRules::Dt;
+	Hud.bCalled = Rules.bCalled;
+	Hud.TrackId = Rules.Track.Id;
 	Hud.RaceTime = Rules.RaceTime();
 	Hud.Steps = StepCount.load(std::memory_order_relaxed);
 	Hud.Rows.SetNum(Rules.Entries.Num());
@@ -230,7 +253,9 @@ void URacerController::Finish()
 		Hud.Result = Line;
 	}
 	if (!bTest) return;
-	const int32 Code = Rules.Phase != ERacePhase::Finished ? 1 : CheckFailures.load() > 0 ? 3 : 0;
+	// 1: not everyone finished (unless the test asked for a short race with -RaceLimit); 3: a check failed
+	const bool bAllHome = Rules.Finished == Rules.Entries.Num();
+	const int32 Code = CheckFailures.load() > 0 ? 3 : (!bAllHome && !bExplicitLimit) ? 1 : 0;
 	UE_LOG(LogRace, Display, TEXT("[RaceTest] exit %d (%d check failures)"), Code, CheckFailures.load());
 	AsyncTask(ENamedThreads::GameThread, [Code] { FPlatformMisc::RequestExitWithStatus(false, (uint8)Code); });
 }

@@ -37,6 +37,9 @@ struct FRaceHud
 	double Total = 0.0;
 	ERacePhase Phase = ERacePhase::Countdown;
 	double CountdownLeft = 0.0, RaceTime = 0.0;
+	double IntroLeft = 0.0, IntroSeconds = 0.0;	// the racer intro before the countdown
+	bool bCalled = false;						// the race was called (finish window / limit): the rest are DNF
+	FString TrackId;
 	int64 Steps = 0;
 	FVector TangentUE = FVector::ForwardVector;	// track direction at the pack's mean distance
 	TArray<FRaceHudRow> Rows;					// standings order
@@ -112,6 +115,8 @@ public:
 private:
 	bool bReady = false, bRace = false, bTest = false, bStarted = false, bReported = false;
 	std::atomic<bool> bGameReady = false;
+	double IntroSeconds = -1.0;
+	bool bExplicitLimit = false;
 	double WaitLogAt = 0.0;
 	TArray<TUniquePtr<FRacer>> Racers;	// every racer of the model, on the grid or parked
 	TArray<FString> ParkedPrefixes;

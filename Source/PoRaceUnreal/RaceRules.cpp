@@ -11,6 +11,8 @@ void FRaceRules::Setup(const mjModel* m, mjData* d, int32 RequestedLaps)
 	Step = 0;
 	RaceStart = -1;
 	Finished = Flips = 0;
+	bCalled = false;
+	FirstFinish = -1;
 	mj_resetData(m, d);	// a fresh start, as race.py's fresh MjData
 	ImpRatio = Entries.Num() ? Entries[0].ImpRatio : 100.0;
 	for (const FRaceEntry& E : Entries) ImpRatio = std::min(ImpRatio, E.ImpRatio);
@@ -104,7 +106,7 @@ int32 FRaceRules::Leader() const
 
 void FRaceRules::PreStep(const mjModel* m, mjData* d)
 {
-	if (Phase == ERacePhase::Countdown && Step >= CountdownSteps)
+	if (Phase == ERacePhase::Countdown && Step >= IntroSteps + CountdownSteps)
 	{
 		Phase = ERacePhase::Racing;
 		RaceStart = Step;
@@ -155,6 +157,7 @@ void FRaceRules::PreStep(const mjModel* m, mjData* d)
 		{
 			E.FinishTime = Rt;
 			E.Place = ++Finished;
+			if (FirstFinish < 0) FirstFinish = Step;
 			R.Target[0] = R.Target[1] = R.Target[2] = 0.0;
 			continue;
 		}
@@ -192,6 +195,11 @@ void FRaceRules::PreStep(const mjModel* m, mjData* d)
 		}
 	}
 	if (Phase == ERacePhase::Racing && Finished == Entries.Num()) Phase = ERacePhase::Finished;
+	else if (Phase == ERacePhase::Racing && ((FinishWindowSteps > 0 && FirstFinish >= 0 && Step - FirstFinish >= FinishWindowSteps) || Step - RaceStart >= LimitSteps))
+	{
+		Phase = ERacePhase::Finished;
+		bCalled = true;
+	}
 }
 
 void FRaceRules::Control(const mjModel* m, mjData* d)
@@ -203,7 +211,7 @@ void FRaceRules::Control(const mjModel* m, mjData* d)
 FString FRaceRules::ResultLine() const
 {
 	FString Out = FString::Printf(TEXT("%s map=%s laps=%d length=%.1fm seed=%llu"),
-		Phase == ERacePhase::Finished ? TEXT("FINISHED") : TEXT("DNF"), *Track.Name, Laps, Total, Seed);
+		Phase == ERacePhase::Finished && !bCalled ? TEXT("FINISHED") : bCalled && Finished ? TEXT("CALLED") : TEXT("DNF"), *Track.Name, Laps, Total, Seed);
 	for (const int32 i : Standings())
 	{
 		const FRaceEntry& E = Entries[i];

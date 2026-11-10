@@ -50,6 +50,17 @@ try {
                 -Project="$(Join-Path $Root 'PoRaceUnreal.uproject')" -WaitMutex -NoHotReloadFromIDE | Select-Object -Last 15
         }
         Step "parity" "Unreal moves the Go2 as MuJoCo does (hold, replay, policy)" { & uv @Py parity_check.py run }
+        Step "parity" "The screens: menu and race checks, layout at 16:9 and a portrait phone (needs a display)" {
+            $ue = Join-Path $UeRoot "Engine\Binaries\Win64\UnrealEditor.exe"
+            $fails = 0
+            foreach ($r in @(@(1280, 720), @(540, 1170))) {
+                $out = & $ue (Join-Path $Root "PoRaceUnreal.uproject") -game -windowed "-ResX=$($r[0])" "-ResY=$($r[1])" -ForceRes -unattended -nosplash -nosound `
+                    -RaceUiTest -AutoStart=1 -RaceLimit=4 -stdout -FullStdOutLogOutput | Out-String
+                $out -split "`n" | Where-Object { $_ -match "\[Check\]|RaceUiTest\]" } | ForEach-Object { $_ -replace '^\[[^\]]*\]\[[^\]]*\]', '' }
+                if ($out -notmatch "RaceUiTest\] done at the results card: 0 check failures") { $fails++ }
+            }
+            $global:LASTEXITCODE = $fails
+        }
         Step "parity" "Unreal races match the reference race (Planar Sprint seeds 1-5)" {
             & powershell -ExecutionPolicy Bypass -File (Join-Path $Root "Scripts/regress.ps1") -Track planar_sprint -Seeds 1,2,3,4,5
         }

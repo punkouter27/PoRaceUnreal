@@ -46,6 +46,9 @@ def main():
   ap.add_argument("--seed", type=int, default=1)
   ap.add_argument("--laps", type=int, default=0)
   ap.add_argument("--flip-at", type=float, default=-1.0)
+  ap.add_argument("--intro", type=float, default=0.0, help="seconds of racer intro before the countdown")
+  ap.add_argument("--finish-window", type=float, default=0.0, help="call the race this long after the winner (0: off)")
+  ap.add_argument("--limit", type=float, default=600.0, help="call the race this long after the start")
   ap.add_argument("--racers", help="comma-separated racer names on the grid (default: every racer of the track model)")
   ap.add_argument("--mjb", type=Path)
   ap.add_argument("--log", type=Path, help="JSONL: every racer's distance and state at 10 Hz")
@@ -66,7 +69,8 @@ def main():
       parked.append(racer)
       continue
     entries.append(Entry(r["name"], racer, r["cruise"], r["maxYawRate"], r["usesUnstick"], card.get("holdsHeadingAtRest", False), card.get("impratio", 100.0)))
-  race = Race(Track.load(a.track), entries, a.seed, laps=a.laps, flip_at=a.flip_at, parked=parked)
+  race = Race(Track.load(a.track), entries, a.seed, laps=a.laps, flip_at=a.flip_at, parked=parked,
+              intro_steps=round(a.intro / 0.004), finish_window_steps=round(a.finish_window / 0.004), limit_steps=round(a.limit / 0.004))
   mujoco.mj_forward(m, d)
   log = a.log.open("w") if a.log else None
   t0 = time.perf_counter()

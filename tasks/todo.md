@@ -49,11 +49,12 @@ Plan approved 2026-11-10.
 - [ ] 3.5 Creature registry in Unreal: moved to 4.2 (the menu's roster needs it; races read the JSON cards)
 
 ## Slice 4 — Game loop
-- [ ] 4.1 `ARaceHUD` corners and standings
-- [ ] 4.2 Menu: track, roster, laps, eligibility; creature + track registry from the JSON cards (from 3.5)
-- [ ] 4.3 Intro, countdown, results card, pause sheet
-- [ ] 4.4 Follow camera
-- [ ] 4.5 `-RaceUiTest`, `-Shots`, `-AutoOk`; UI report
+- [x] 4.1 `ARaceHUD`: corners (track/lap/standings TL, rates TC, pause TR, stamp BR), Canvas text + Slate buttons
+- [x] 4.2 Menu (`L_Menu`): tracks, roster with ready / not ready / not eligible and why, laps, START rules; `RaceRegistry` from the JSON (from 3.5)
+- [x] 4.3 Racer intro (fixed length, in the rules), countdown, results card, pause sheet; finish window and race limit (Python + C++)
+- [x] 4.4 Chase camera, intro close-ups; fills any screen shape, keeps the vertical field of view
+- [x] 4.5 `-RaceUiTest` (registry, eligibility, START, layout at 16:9 / portrait / 21:9), `-RaceShots`, `-AutoStart` / `-AutoOk` / `-AutoLoops` (10/10); `SCREENSHOTS/slice4_ui_report.html`
+- [ ] 4.6 Memory over many races: +315 MB in 10 short races, unclear if a leak: decide in the Slice 10 soak
 
 ## Slice 5 — Race rules complete
 - [ ] 5.1 Tactics (pass, block, lateral cap) in reference and Unreal

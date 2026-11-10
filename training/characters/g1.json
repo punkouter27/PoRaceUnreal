@@ -1,0 +1,19 @@
+{
+ "id": "g1",
+ "displayName": "G1",
+ "racerName": "G1",
+ "kind": "robot",
+ "height": 1.32,
+ "raceable": 0,
+ "blockedBy": "No race brain yet: the G1 humanoid is started but not onboarded (Unity task E.4).",
+ "racerColor": [
+  0.55,
+  0.85,
+  0.55
+ ],
+ "terrains": [
+  "flat"
+ ],
+ "model": "training/g1/assets/g1_porace.xml",
+ "_note": "Roster stub (Slice 4): listed as not ready until a brain graduates and passes the gates."
+}

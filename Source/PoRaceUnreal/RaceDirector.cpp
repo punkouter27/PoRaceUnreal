@@ -1,6 +1,8 @@
 #include "RaceDirector.h"
 
 #include "Camera/CameraActor.h"
+#include "Engine/Engine.h"
+#include "Engine/GameViewportClient.h"
 #include "Camera/CameraComponent.h"
 #include "Components/PrimitiveComponent.h"
 #include "EngineUtils.h"
@@ -10,6 +12,7 @@
 #include "MuJoCo/Core/MjPhysicsEngine.h"
 #include "MuJoCo/Utils/MjUtils.h"
 #include "RaceNames.h"
+#include "RaceRegistry.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "UnrealClient.h"
@@ -32,9 +35,15 @@ void ARaceDirector::BeginPlay()
 	if (Camera)
 	{
 		// a chase camera swings hard when the pack turns or a racer flips: no motion blur
-		FPostProcessSettings& PP = Camera->GetCameraComponent()->PostProcessSettings;
+		UCameraComponent* Cam = Camera->GetCameraComponent();
+		FPostProcessSettings& PP = Cam->PostProcessSettings;
 		PP.bOverride_MotionBlurAmount = true;
 		PP.MotionBlurAmount = 0.f;
+		// any screen shape: fill it (no letterbox on a phone) and keep the vertical field of view (a portrait screen
+		// sees more above and below, not a stretched wide angle)
+		Cam->SetConstraintAspectRatio(false);
+		Cam->bOverrideAspectRatioAxisConstraint = true;
+		Cam->AspectRatioAxisConstraint = EAspectRatioAxisConstraint::AspectRatio_MaintainYFOV;
 	}
 	if (Camera)
 		if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0)) PC->SetViewTarget(Camera);
@@ -172,7 +181,9 @@ void ARaceDirector::Tick(float DeltaSeconds)
 		{
 			if (ShotsTaken & Bit) return;
 			ShotsTaken |= Bit;
-			const FString File = FPaths::Combine(ShotDir, FString::Printf(TEXT("%s_%s.png"), *Race.Track.Replace(TEXT(" "), TEXT("")), Name));
+			FVector2D Size(0, 0);
+			if (GEngine && GEngine->GameViewport) GEngine->GameViewport->GetViewportSize(Size);
+			const FString File = FPaths::Combine(ShotDir, FString::Printf(TEXT("%s_%s_%.0fx%.0f.png"), *Race.Track.Replace(TEXT(" "), TEXT("")), Name, Size.X, Size.Y));
 			FScreenshotRequest::RequestScreenshot(File, true, false);
 			UE_LOG(LogRace, Display, TEXT("[Shot] %s"), *File);
 		};
@@ -180,6 +191,27 @@ void ARaceDirector::Tick(float DeltaSeconds)
 		if (Race.Phase == ERacePhase::Racing && Race.RaceTime > 12.0) Shot(2, TEXT("2_racing"));
 		for (const FRaceHudRow& R : Race.Rows) if (R.bGettingUp && Race.Phase == ERacePhase::Racing) Shot(4, TEXT("3_getup"));
 		if (Race.Phase == ERacePhase::Racing && Race.Rows.Num() && Race.Rows[0].Distance > Race.Total - 3.0) Shot(8, TEXT("4_finish"));
+	}
+
+	// racer intro: in front of the racer being introduced, at its height, looking back at it
+	if (Race.IntroLeft > 0.0 && Race.Rows.Num())
+	{
+		if (Roster.Num() == 0) Roster = RaceRegistry::Racers();
+		const int32 N = Race.Rows.Num();
+		const int32 k = FMath::Clamp(FMath::FloorToInt((Race.IntroSeconds - Race.IntroLeft) / FMath::Max(Race.IntroSeconds / N, 1e-3)), 0, N - 1);
+		const FRaceHudRow& R = Race.Rows[k];
+		const FRaceRacerInfo* Info = RaceRegistry::FindRacer(Roster, R.Name);
+		const double Height = Info ? Info->Height * 100.0 : 50.0;
+		const FVector Fwd = Race.TangentUE.GetSafeNormal();
+		const FVector Ground(R.PosUE.X, R.PosUE.Y, 0.0);
+		const FVector Look = Ground + FVector::UpVector * Height * 0.55;
+		const FVector Want = Ground + Fwd * FMath::Max(140.0, Height * 1.6) + FVector::CrossProduct(FVector::UpVector, Fwd) * Height * 0.35 + FVector::UpVector * Height * 0.7;
+		const float A = 1.f - FMath::Exp(-4.f * DeltaSeconds);
+		CamPos = bHaveCamera ? FMath::Lerp(CamPos, Want, A) : Want;
+		bHaveCamera = true;
+		CamFwd = Fwd;
+		if (Camera) Camera->SetActorLocationAndRotation(CamPos, (Look - CamPos).Rotation());
+		return;
 	}
 
 	// chase camera: behind and above the mean of the racers still running, looking along the track there

@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
+#include "RaceRegistry.h"
 #include "RacerController.h"
 #include "RaceDirector.generated.h"
 
@@ -39,6 +40,7 @@ public:
 private:
 	TWeakObjectPtr<URacerController> Controller;
 	FRaceHud Race;
+	TArray<FRaceRacerInfo> Roster;	// heights for the intro shots
 	bool bChaosChecked = false, bMarkerChecked = false, bHaveCamera = false, bSawRace = false, bParkedHidden = false;
 	int32 Ticks = 0, ShotsTaken = 0;
 	FString ShotDir;

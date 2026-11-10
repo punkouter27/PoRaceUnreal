@@ -1,7 +1,7 @@
 From af0e7f4d6c1a6fb09f1f8d5935d0921e7c6084fe Mon Sep 17 00:00:00 2001
 From: PoSlap <punkouter26@gmail.com>
 Date: Wed, 21 Oct 2026 14:28:05 -0400
-Subject: [PATCH 01/10] Pin MuJoCo to 3.10.0 (match PoSlap trainer)
+Subject: [PATCH 01/11] Pin MuJoCo to 3.10.0 (match PoSlap trainer)
 
 ---
  third_party/MuJoCo/src | 2 +-
@@ -21,7 +21,7 @@ index 67a1ea6..28009f9 160000
 From 4623bdef3a8f44841b3d4b8e9b18e71bc7660910 Mon Sep 17 00:00:00 2001
 From: PoSlap <punkouter26@gmail.com>
 Date: Wed, 21 Oct 2026 14:50:39 -0400
-Subject: [PATCH 02/10] UE 5.8: JSON object keys are FSharedString
+Subject: [PATCH 02/11] UE 5.8: JSON object keys are FSharedString
 
 ---
  .../URLab/Private/Bridge/MsgpackHelpers.cpp   |  2 +-
@@ -145,7 +145,7 @@ index 9758d6f..2f812b9 100644
 From 9a951c975fabb300f40907853e2cb30adab2b94a Mon Sep 17 00:00:00 2001
 From: PoSlap <punkouter26@gmail.com>
 Date: Wed, 21 Oct 2026 14:51:00 -0400
-Subject: [PATCH 03/10] UE 5.8: remaining FSharedString keys
+Subject: [PATCH 03/11] UE 5.8: remaining FSharedString keys
 
 ---
  Source/URLab/Private/Bridge/RpcDispatcher.cpp | 4 ++--
@@ -180,7 +180,7 @@ index 2f812b9..a9adf88 100644
 From a027259a74e8ba8e62f5d77c9ec0799ff08821d8 Mon Sep 17 00:00:00 2001
 From: punkouter26 <punkouter26@gmail.com>
 Date: Sun, 25 Oct 2026 12:19:00 -0400
-Subject: [PATCH 04/10] feat(android): add Android arm64-v8a build support for
+Subject: [PATCH 04/11] feat(android): add Android arm64-v8a build support for
  MuJoCo 3.10.0
 
 ---
@@ -368,7 +368,7 @@ index 0000000..8ce516f
 From 575d3612084ebb0440b370da460ee686eaca5f1d Mon Sep 17 00:00:00 2001
 From: PoSlap <punkouter26@gmail.com>
 Date: Mon, 26 Oct 2026 04:09:43 -0400
-Subject: [PATCH 05/10] Android: stub libzmq/CoACD headers, package
+Subject: [PATCH 05/11] Android: stub libzmq/CoACD headers, package
  libmujoco.so
 
 The dev bridge (ZMQ) and mesh decomposition (CoACD) have no Android build;
@@ -479,7 +479,7 @@ index 0000000..a152b3f
 From 87c9810fb00cb37adea5c8d1868f293eaacb1b42 Mon Sep 17 00:00:00 2001
 From: PoSlap <punkouter26@gmail.com>
 Date: Mon, 26 Oct 2026 10:14:25 -0400
-Subject: [PATCH 06/10] Android: 16 KB page-aligned libmujoco.so (Android 15+)
+Subject: [PATCH 06/11] Android: 16 KB page-aligned libmujoco.so (Android 15+)
 
 ---
  third_party/MuJoCo/build_android.ps1 | 2 ++
@@ -509,7 +509,7 @@ index 8ce516f..380c80b 100644
 From 9fabc38e65ce73ff3b34ce9f52902d182f546e1b Mon Sep 17 00:00:00 2001
 From: punko <punko@users.noreply.github.com>
 Date: Fri, 30 Oct 2026 16:59:41 -0400
-Subject: [PATCH 07/10] Twist controller: don't cache input assets in
+Subject: [PATCH 07/11] Twist controller: don't cache input assets in
  GC-invisible statics
 
 AMjArticulation::PostInitializeComponents kept IMC_TwistControl, IA_TwistMove and IA_TwistTurn in
@@ -555,7 +555,7 @@ index 3b9dc2a..bb93761 100644
 From 55493dd32996ec34c14202c04c83b16e67010be9 Mon Sep 17 00:00:00 2001
 From: punko <punko@users.noreply.github.com>
 Date: Fri, 30 Oct 2026 18:48:06 -0400
-Subject: [PATCH 08/10] Build joints and bodies in Blueprint authoring order
+Subject: [PATCH 08/11] Build joints and bodies in Blueprint authoring order
 
 GetAttachChildren() order is rebuilt at load and differs in cooked builds
 (siblings come back name-sorted), which reorders the joints inside a body
@@ -683,7 +683,7 @@ index 97be0f3..18aba53 100644
 From 0e50c5873cdb21f78ba8e796037ca461a92a33d6 Mon Sep 17 00:00:00 2001
 From: punkouter27 <punkouter27@gmail.com>
 Date: Tue, 10 Nov 2026 10:06:42 -0500
-Subject: [PATCH 09/10] Pin MuJoCo to 4.0.0 (match PoRace trainer)
+Subject: [PATCH 09/11] Pin MuJoCo to 4.0.0 (match PoRace trainer)
 
 ---
  third_party/MuJoCo/src | 2 +-
@@ -703,7 +703,7 @@ index 28009f9..ac60eae 160000
 From 8a268fe46cc4f5473245f40a3a0d1359271f4172 Mon Sep 17 00:00:00 2001
 From: punkouter27 <punkouter27@gmail.com>
 Date: Tue, 10 Nov 2026 10:51:28 -0500
-Subject: [PATCH 10/10] MuJoCo 4.0: limit flags are mjtLimited, active and
+Subject: [PATCH 10/11] MuJoCo 4.0: limit flags are mjtLimited, active and
  actgravcomp are bools
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
@@ -787,6 +787,42 @@ index 4e89d8d..e636615 100644
  	if (bOverride_range)
  	{
  		for (int32 i = 0; i < FMath::Min(range.Num(), 2); ++i)
+-- 
+2.56.0.windows.4
+
+
+From 31beabc58dfb491bed2d0beba2e790e31ec18b0d Mon Sep 17 00:00:00 2001
+From: punkouter27 <punkouter27@gmail.com>
+Date: Tue, 10 Nov 2026 14:29:07 -0500
+Subject: [PATCH 11/11] MjBody: skip a frame drawn before the first snapshot
+ instead of disabling the body
+
+After a level travel the game can draw before the physics thread publishes its
+first render snapshot (XPos empty); every body then disabled its updates for
+good and stayed at its spawn pose.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ Source/URLab/Private/MuJoCo/Components/Bodies/MjBody.cpp | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/Source/URLab/Private/MuJoCo/Components/Bodies/MjBody.cpp b/Source/URLab/Private/MuJoCo/Components/Bodies/MjBody.cpp
+index 27450df..e700f86 100644
+--- a/Source/URLab/Private/MuJoCo/Components/Bodies/MjBody.cpp
++++ b/Source/URLab/Private/MuJoCo/Components/Bodies/MjBody.cpp
+@@ -108,6 +108,12 @@ void UMjBody::ApplyRenderState(const FMjRenderSnapshot& Snap)
+ 
+ 	const int32 PosIdx = Id * 3;
+ 	const int32 QuatIdx = Id * 4;
++	// No snapshot published yet (the physics thread has not stepped since the model compiled): a frame drawn that early,
++	// after a level travel, used to disable this body for good below. Skip the frame instead.
++	if (Snap.XPos.Num() == 0 || Snap.XQuat.Num() == 0)
++	{
++		return;
++	}
+ 	if (Snap.XPos.Num() <= PosIdx + 2 || Snap.XQuat.Num() <= QuatIdx + 3)
+ 	{
+ 		UE_LOG(LogURLabBind, Warning,
 -- 
 2.56.0.windows.4
 

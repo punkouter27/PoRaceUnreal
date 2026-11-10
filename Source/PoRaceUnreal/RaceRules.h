@@ -53,10 +53,15 @@ public:
 	int32 Laps = 1;
 	double FlipAt = -1.0;
 	bool bRandomizeGrid = true;
+	int64 IntroSteps = 0;			// racers stand on the grid this long before the countdown (the racer intro)
+	int64 FinishWindowSteps = 0;	// interactive: the race is called this long after the winner (0: off, as in tests)
+	int64 LimitSteps = TestLimitSteps;	// the race is called this long after the start
 
 	ERacePhase Phase = ERacePhase::Countdown;
 	int64 Step = 0, RaceStart = -1;
 	int32 Finished = 0, Flips = 0;
+	bool bCalled = false;			// ended by the finish window or the limit: the rest are classified by distance
+	int64 FirstFinish = -1;
 	double Total = 0.0;
 	double ImpRatio = 100.0;		// this race's (Setup)
 
@@ -66,8 +71,9 @@ public:
 	void Control(const mjModel* m, mjData* d);
 
 	double RaceTime() const { return RaceStart >= 0 ? (double)(Step - RaceStart) * Dt : 0.0; }
-	double CountdownLeft() const { return Phase == ERacePhase::Countdown ? (double)(CountdownSteps - Step) * Dt : 0.0; }
-	bool Over() const { return Phase == ERacePhase::Finished || (RaceStart >= 0 && Step - RaceStart > TestLimitSteps); }
+	double CountdownLeft() const { return Phase == ERacePhase::Countdown ? (double)(IntroSteps + CountdownSteps - Step) * Dt : 0.0; }
+	double IntroLeft() const { return Phase == ERacePhase::Countdown && Step < IntroSteps ? (double)(IntroSteps - Step) * Dt : 0.0; }
+	bool Over() const { return Phase == ERacePhase::Finished; }
 	/** Entry indices, best first: finishers by time, then the rest by distance; ties keep grid order. */
 	TArray<int32> Standings() const;
 	/** One line per race, the Unity -raceTest format (race.py result_line). */
