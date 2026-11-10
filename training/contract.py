@@ -191,9 +191,33 @@ def human_fingerprint(creature):
   }
 
 
+def stroller_fingerprint():
+  """The wheeled stroller (training/stroller/make_model.py): a free chassis, a steering fork and three wheel hinges.
+  Options are the stroller scene's (scene_stroller.xml, the race's); the body file is what a track model attaches."""
+  scene = ROOT / "training" / "stroller" / "assets" / "scene_stroller.xml"
+  m = mujoco.MjModel.from_xml_path(str(scene))
+  T = mujoco.mjtObj
+  root = mujoco.mj_name2id(m, T.mjOBJ_BODY, "chassis")
+  return {
+      "creature": "stroller",
+      "mujoco": MUJOCO_VERSION,
+      "source": "training/stroller/assets/stroller_porace.xml",
+      "option": option(m),
+      "root_body": "chassis",
+      "joints": ["steer", "wheel_front", "wheel_rear_l", "wheel_rear_r"],
+      "actuators": [mujoco.mj_id2name(m, T.mjOBJ_ACTUATOR, a) for a in range(m.nu)],
+      "home_height": float(m.key_qpos[0][2]),
+      "mass": float(m.body_subtreemass[root]),
+      "qpos_names": qpos_names(m),
+      "qpos_home": [float(x) for x in m.key_qpos[0]],
+      "model": model_numbers(m, "chassis"),
+  }
+
+
 TARGETS = {
     ROOT / "training" / "models" / "go2_fingerprint.json": lambda: json.dumps(go2_fingerprint(), indent=1) + "\n",
     ROOT / "training" / "models" / "matt_fingerprint.json": lambda: json.dumps(human_fingerprint("matt"), indent=1) + "\n",
+    ROOT / "training" / "models" / "stroller_fingerprint.json": lambda: json.dumps(stroller_fingerprint(), indent=1) + "\n",
     ROOT / "Source" / "PoRaceUnreal" / "RaceContract.gen.h": header,
 }
 

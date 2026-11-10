@@ -13,6 +13,7 @@
 #include "RaceModel.h"
 #include "RacerGo2.h"
 #include "RacerHuman.h"
+#include "RacerStroller.h"
 #include "RaceNames.h"
 
 DEFINE_LOG_CATEGORY(LogRace);
@@ -163,7 +164,14 @@ bool URacerController::BindRace(mjModel* m, mjData* d)
 		R.TryGetStringField(TEXT("getupBrain"), GetupName);
 		auto BrainFile = [&](const FString& Name) { return LoadBrainFile(FString::Printf(TEXT("training/models/brains/%s.onnx"), *Name)); };
 		TUniquePtr<FRacer> Racer;
-		if (Card->GetStringField(TEXT("kind")) == TEXT("human"))
+		if (Card->GetStringField(TEXT("kind")) == TEXT("stroller"))
+		{
+			TUniquePtr<FStrollerRacer> W = MakeUnique<FStrollerRacer>();
+			bOk &= W->Bind(m, Prefix, *Card);
+			bOk &= W->Loco.Load(BrainFile(LocoName));
+			Racer = MoveTemp(W);
+		}
+		else if (Card->GetStringField(TEXT("kind")) == TEXT("human"))
 		{
 			TUniquePtr<FHumanRacer> H = MakeUnique<FHumanRacer>();
 			bOk &= H->Bind(m, Prefix, *Card, *Creature);
@@ -197,6 +205,7 @@ bool URacerController::BindRace(mjModel* m, mjData* d)
 		Card->TryGetBoolField(TEXT("holdsHeadingAtRest"), E.bHoldsHeading);
 		Card->TryGetNumberField(TEXT("impratio"), E.ImpRatio);
 		Card->TryGetNumberField(TEXT("pace"), E.Pace);
+		Card->TryGetNumberField(TEXT("width"), E.Width);
 		const TArray<TSharedPtr<FJsonValue>>* Feet;
 		if (Card->TryGetArrayField(TEXT("footGeoms"), Feet))
 			for (const TSharedPtr<FJsonValue>& F : *Feet) E.Feet.Add(Prefix + F->AsString());

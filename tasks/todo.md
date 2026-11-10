@@ -63,6 +63,13 @@ Plan approved 2026-11-10.
 - [x] 5.4 Handicap (`-Handicap`, menu toggle, `?Handicap=1`) from cruise × card `pace`; unstick unchanged; fixed: after a reset the progress walk restarts at the spawn's segment (an off-track reset loop on curves, also in Unity)
 - [x] 5.5 Contact audit (`FContactAudit`, always on in Unreal, `--audit` in Python, identical lines), `-ContactGate` exit 4; bump count in the result line; `footGeoms` on the cards
 
+## Added: the Stroller (owner's request, 2026-11-10)
+- [x] S.1 Body from the scan's rig (`training/stroller/make_model.py`), card, fingerprint
+- [x] S.2 Rolling brain trained (`train.py --env stroller`, run s1): ladder 100/100 on MuJoCo 4.0.0
+- [x] S.3 `racelib/stroller.py` + `FStrollerRacer`; `ARacerVisualStroller` (scan rides the chassis, wheels turn)
+- [x] S.4 Width-aware tactics and the alongside rule (both runtimes); three-racer races identical in Unreal
+- [x] S.5 Report `docs/20261110/stroller.md`
+
 ## Slice 6 — All four tracks
 - [ ] 6.1 Banked surface geoms and visuals
 - [ ] 6.2 Steeplechase obstacles and visuals

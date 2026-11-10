@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from go2.sim import brain  # noqa: E402
 from racelib.go2racer import Go2Racer  # noqa: E402
 from racelib.human import HumanRacer  # noqa: E402
+from racelib.stroller import StrollerRacer  # noqa: E402
 from racelib.model import apply_numbers, apply_option  # noqa: E402
 from racelib.race import Entry, Race  # noqa: E402
 from racelib.track import Track  # noqa: E402
@@ -69,7 +70,9 @@ def main():
   entries, parked = [], []
   for r in fp["racers"]:
     card = json.loads((ROOT / "training" / "characters" / f"{r['card']}.json").read_text())
-    if card["kind"] == "human":
+    if card["kind"] == "stroller":
+      racer = StrollerRacer(m, d, r["prefix"], card, brain(r["brain"]))
+    elif card["kind"] == "human":
       creature = json.loads((ROOT / card["fingerprint"]).read_text())
       racer = HumanRacer(m, d, r["prefix"], card, creature, brain(r["brain"]))
     else:
@@ -78,7 +81,7 @@ def main():
       parked.append(racer)
       continue
     entries.append(Entry(r["name"], racer, r["cruise"], r["maxYawRate"], r["usesUnstick"], card.get("holdsHeadingAtRest", False), card.get("impratio", 100.0),
-                         tuple(r["prefix"] + f for f in card.get("footGeoms", [])), card.get("pace", 1.0)))
+                         tuple(r["prefix"] + f for f in card.get("footGeoms", [])), card.get("pace", 1.0), card.get("width", 0.35)))
   race = Race(Track.load(a.track), entries, a.seed, laps=a.laps, flip_at=a.flip_at, flip_count=a.flip_count, parked=parked,
               tactics=not a.no_tactics, handicap=a.handicap, yellow_flag=a.yellow_flag, audit=a.audit or a.contact_gate,
               intro_steps=round(a.intro / 0.004), finish_window_steps=round(a.finish_window / 0.004),

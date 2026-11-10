@@ -149,7 +149,9 @@ void ARaceHUD::DrawHUD()
 	}
 	LastWall = Now;
 	LastSteps = Race.Steps;
-	Text(FString::Printf(TEXT("%.0f fps  ·  %.0f Hz"), FpsSmooth, HzSmooth), 0.5f * W, Pad, FLinearColor(0.85f, 0.85f, 0.85f), 13.f * S, true, false, TEXT("TC"));
+	// the rates: top centre; on a portrait screen bottom centre (the standings column reaches the middle there)
+	const bool bPortrait = H > W;
+	Text(FString::Printf(TEXT("%.0f fps  ·  %.0f Hz"), FpsSmooth, HzSmooth), 0.5f * W, bPortrait ? H - Pad - 18.f * S : Pad, FLinearColor(0.85f, 0.85f, 0.85f), 13.f * S, true, false, TEXT("TC"));
 	if (!Race.bRace) return;
 
 	if (PC && PC->WasInputKeyJustPressed(EKeys::Escape)) TogglePause();

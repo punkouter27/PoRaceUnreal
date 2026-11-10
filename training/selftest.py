@@ -17,6 +17,8 @@ CASES = [
   ("avoid", 1.5, 0, 0.0, [("A", 10.0, 0.0, 1.5, 0.2, RACING, -1), ("B", 14.0, 0.5, 1.6, 0.2, FALLEN, -1)]),
   ("pass-hold", 2.0, 0, 0.4, [("A", 10.3, 0.55, 1.5, 0.2, RACING, 1), ("B", 10.0, -0.05, 1.3, 0.2, RACING, -1)]),
   ("pass-done", 2.0, 0, 0.4, [("A", 11.1, 0.55, 1.5, 0.2, RACING, 1), ("B", 10.0, -0.05, 1.3, 0.2, RACING, -1)]),
+  ("pass-wide", 1.5, 0, 0.0, [("S", 10.0, 0.0, 1.5, 0.2, RACING, -1, 0.65), ("B", 11.5, 0.1, 1.2, 0.2, RACING, -1, 0.35)]),
+  ("alongside", 1.5, 0, 0.0, [("S", 10.0, 0.1, 1.45, 0.2, RACING, -1, 0.65), ("B", 10.3, -0.1, 1.45, 0.2, RACING, -1, 0.35)]),
   ("faster-ahead", 1.5, 0, 0.0, [("A", 10.0, 0.0, 1.2, 0.2, RACING, -1), ("B", 11.0, 0.0, 1.5, 0.2, RACING, -1)]),
   ("block", 1.5, 0, 0.3, [("C", 20.0, 0.3, 1.2, 0.8, RACING, -1), ("D", 19.0, -0.2, 1.5, 0.2, RACING, 0)]),
   ("no-block-timid", 1.5, 0, 0.3, [("C", 20.0, 0.3, 1.2, 0.3, RACING, -1), ("D", 19.0, -0.2, 1.5, 0.2, RACING, 0)]),
@@ -31,8 +33,10 @@ EXPECT = {
   "avoid": ("AVOID", -0.35),          # B is down: 0.85 m beside it, the left would be past the rail margin
   "pass-hold": ("PASS L", 0.6),       # alongside, 0.3 m ahead, 0.6 m aside: the pass holds its line
   "pass-done": ("-", 0.4),            # 1.1 m clear: back to its own line
+  "pass-wide": ("PASS R", -0.6),      # a 0.65 m stroller passes a 0.35 m dog 0.70 m aside (half widths + 0.2)
+  "alongside": ("ALONGSIDE", 0.6),    # level with a dog 0.2 m to its right: holds 0.70 m left of it
   "faster-ahead": ("-", 0.0),         # nobody slower ahead: hold the line
-  "block": ("BLOCK", 0.1),            # aggressive C covers D's line: 40 % of the way from its line to D
+  "block": ("BLOCK", 0.45),           # aggressive C covers D's line: 40 % of the way (0.1), but never closer than 0.65 to D
   "no-block-timid": ("-", 0.3),       # aggression 0.3: holds its line
   "boxed-in": ("-", 0.0),             # no room either side on a narrow track: stay behind
   "stumbling": ("-", 0.2),            # no manoeuvres while stumbling
@@ -43,8 +47,10 @@ def lines():
   out = []
   for name, half_width, who, line, rows in CASES:
     entries = []
-    for n, dist, lat, speed, aggr, state, passing in rows:
+    for row in rows:
+      n, dist, lat, speed, aggr, state, passing = row[:7]
       e = Entry(n, None, 1.5, 1.2, True)
+      e.width = row[7] if len(row) > 7 else 0.35
       e.distance, e.lateral, e.speed, e.aggression, e.state, e.passing = dist, lat, speed, aggr, state, passing
       entries.append(e)
     v = tactic(entries, who, line, half_width)

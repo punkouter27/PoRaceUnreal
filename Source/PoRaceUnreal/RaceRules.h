@@ -23,6 +23,7 @@ struct FRaceEntry
 	bool bHoldsHeading = false;	// steer to the track heading during the countdown (a brain that drifts on a zero command)
 	double ImpRatio = 100.0;		// the impratio its brain was trained at; the race runs at the grid's lowest
 	TArray<FString> Feet;			// foot geom names (prefixed), for the contact audit
+	double Width = 0.35;				// body width across the track (card "width"): the tactics' gaps grow with it
 	double Pace = 1.0;				// share of the commanded speed it holds over a race (card "pace"): the handicap's expectation
 
 	double Lane = 0.0, Speed = 0.0, Aggression = 0.0, HeadStart = 0.0;
@@ -92,6 +93,10 @@ public:
 	static constexpr double OffsetSlew = 0.6 * Dt;	// the tactical offset moves at 0.6 m/s
 	static constexpr double PassGap = 0.65, AvoidGap = 0.85, Margin = 0.45;
 	static constexpr double PassClear = 1.0;			// m ahead before a pass under way lets go
+	static constexpr double Clearance = 0.2;			// m between two bodies side by side (gap = half widths + this)
+	static constexpr double Alongside = 0.8;			// m along the track: closer than this, two racers are side by side
+	/** Centre-to-centre distance to keep beside another racer: Unity's gap, or wider for wide bodies (race.py side_gap). */
+	static double SideGap(const FRaceEntry& A, const FRaceEntry& B, double Base) { return std::max(Base, 0.5 * (A.Width + B.Width) + Clearance); }
 	static constexpr double OvertakeHyst = 0.25;		// m apart before "who is ahead" changes
 
 	FRaceTrack Track;

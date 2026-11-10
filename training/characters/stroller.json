@@ -1,0 +1,48 @@
+{
+ "id": "stroller",
+ "displayName": "Stroller",
+ "racerName": "Stroller",
+ "kind": "stroller",
+ "height": 1.0,
+ "raceable": 1,
+ "blockedBy": null,
+ "racerColor": [
+  0.95,
+  0.35,
+  0.55
+ ],
+ "traits": "A three-wheeled jogging stroller, scanned. No legs: it learned to drive its two rear wheels and steer the front one. Cannot strafe or spin on the spot; tips over if it turns too hard.",
+ "visualPrefab": null,
+ "visualMesh": "Content/Art/Stroller/SK_Stroller.fbx",
+ "fingerprint": "training/models/stroller_fingerprint.json",
+ "model": "training/stroller/assets/stroller_porace.xml",
+ "rootBody": "chassis",
+ "homeHeight": 0.002,
+ "cruise": 1.5,
+ "maxYawRate": 1.0,
+ "usesUnstick": false,
+ "holdsHeadingAtRest": false,
+ "terrains": [
+  "flat"
+ ],
+ "_terrains_note": "Flat tracks only: it was trained on flat ground (banks and hurdles are untested; a 6 cm hurdle is a third of its front wheel).",
+ "impratio": 1.0,
+ "_impratio_note": "At impratio 100 the stiff friction under the race's 1-iteration solver binds the three wheels and steering does nothing (training/stroller/make_model.py); it trains and races at 1, as Matt does.",
+ "brains": {
+  "flat": "stroller_roll"
+ },
+ "steerMax": 0.785,
+ "wheelTorque": 2.0,
+ "footGeoms": [
+  "wheel_front",
+  "wheel_rear_l",
+  "wheel_rear_r"
+ ],
+ "_footGeoms_note": "Its wheels: the contact audit holds them to the tighter foot limit.",
+ "pace": 0.97,
+ "cameraHeight": 0.6,
+ "_brain_note": "stroller_roll = run s1 (train.py --env stroller, 14.7 M steps, 16 min on the RTX 5070 Ti, 2026-11-10). Ladder on MuJoCo 4.0.0 CPU: every test 10/10, graduation 100/100 (mean err 0.074, 0 tipped). Weights final/stroller_s1_params.pkl.",
+ "width": 0.65,
+ "_width_note": "Body width across the track (m), arms at the sides: the tactics keep (width + other's) / 2 + 0.2 m beside another racer when passing or blocking (never less than Unity's 0.65).",
+ "_pace_note": "Planar Sprint alone, seed 1: 100 m in 70.92 s at a 1.45 m/s command (Slice 5 method)."
+}

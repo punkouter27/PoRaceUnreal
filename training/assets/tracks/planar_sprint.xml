@@ -5,7 +5,7 @@
     <flag eulerdamp="disable"/>
   </option>
 
-  <size nkey="2"/>
+  <size nkey="3"/>
 
   <default>
     <default class="blue_main">
@@ -43,6 +43,16 @@
     <default class="matt_main">
       <geom friction="0.6" rgba="0.75 0.55 0.45 1"/>
       <site group="5" rgba="1 0 0 1"/>
+    </default>
+    <default class="stroller_main">
+      <default class="stroller_stroller">
+        <default class="stroller_frame">
+          <geom rgba="0.15 0.15 0.18 1" density="0"/>
+        </default>
+        <default class="stroller_wheel">
+          <geom type="cylinder" rgba="0.75 0.75 0.75 1"/>
+        </default>
+      </default>
     </default>
   </default>
 
@@ -321,6 +331,33 @@
         </body>
       </body>
     </frame>
+    <frame pos="-40 -34 5.002">
+      <body name="stroller_chassis" childclass="stroller_stroller" pos="0 0 0.002">
+        <inertial pos="-0.1 0 0.3" mass="12" diaginertia="1 1.64 1.36"/>
+        <joint name="stroller_root" type="free"/>
+        <geom name="stroller_seat" class="stroller_frame" size="0.25 0.28 0.22" pos="0 -0.03 0.4" type="box"/>
+        <geom name="stroller_canopy" class="stroller_frame" size="0.185 0.3 0.15" pos="-0.235 -0.01 0.77" type="box"/>
+        <geom name="stroller_handle" class="stroller_frame" size="0.025 0.3" pos="-0.55 0 0.95" quat="0.707107 0.707107 0 0" type="capsule"/>
+        <geom name="stroller_fork" class="stroller_frame" size="0.11 0.05 0.05" pos="0.36 -0.0175 0.33" type="box"/>
+        <site name="stroller_imu" size="0.01" pos="-0.1 0 0.3"/>
+        <body name="stroller_steer" pos="0.437 -0.0175 0.128">
+          <inertial pos="0 0 0.08" mass="0.2" diaginertia="0.001 0.001 0.001"/>
+          <joint name="stroller_steer" range="-0.785 0.785" armature="0.01" damping="0.5"/>
+          <body name="stroller_wheel_front">
+            <joint name="stroller_wheel_front" armature="0.002" damping="0.002" axis="0 1 0"/>
+            <geom name="stroller_wheel_front" class="stroller_wheel" size="0.128 0.0225" quat="0.707107 0.707107 0 0" mass="0.4"/>
+          </body>
+        </body>
+        <body name="stroller_wheel_rear_l" pos="-0.232 0.2935 0.168">
+          <joint name="stroller_wheel_rear_l" armature="0.01" damping="0.01" axis="0 1 0"/>
+          <geom name="stroller_wheel_rear_l" class="stroller_wheel" size="0.168 0.03" quat="0.707107 0.707107 0 0" mass="0.7"/>
+        </body>
+        <body name="stroller_wheel_rear_r" pos="-0.232 -0.2935 0.168">
+          <joint name="stroller_wheel_rear_r" armature="0.01" damping="0.01" axis="0 1 0"/>
+          <geom name="stroller_wheel_rear_r" class="stroller_wheel" size="0.168 0.03" quat="0.707107 0.707107 0 0" mass="0.7"/>
+        </body>
+      </body>
+    </frame>
   </worldbody>
 
   <contact>
@@ -377,6 +414,9 @@
     <general name="matt_right_wrist_roll_joint" joint="matt_right_wrist_roll_joint" ctrlrange="-0.6 0.6" forcelimited="true" forcerange="-10 10" biastype="affine" gainprm="8" biasprm="0 -8"/>
     <general name="matt_right_wrist_pitch_joint" joint="matt_right_wrist_pitch_joint" ctrlrange="-0.6 0.6" forcelimited="true" forcerange="-10 10" biastype="affine" gainprm="8" biasprm="0 -8"/>
     <general name="matt_right_wrist_yaw_joint" joint="matt_right_wrist_yaw_joint" ctrlrange="-0.6 0.6" forcelimited="true" forcerange="-10 10" biastype="affine" gainprm="8" biasprm="0 -8"/>
+    <general name="stroller_steer" joint="stroller_steer" ctrlrange="-0.785 0.785" input="pos" biastype="affine" gainprm="8" biasprm="0 -8 -0.3"/>
+    <general name="stroller_wheel_rear_l" joint="stroller_wheel_rear_l" ctrlrange="-2 2"/>
+    <general name="stroller_wheel_rear_r" joint="stroller_wheel_rear_r" ctrlrange="-2 2"/>
   </actuator>
 
   <sensor>
@@ -426,10 +466,16 @@
     <contact geom1="matt_right_foot" geom2="matt_left_shin" reduce="mindist" name="matt_right_foot_left_shin_found"/>
     <contact geom1="matt_left_hand_collision" geom2="matt_left_thigh" reduce="mindist" name="matt_left_hand_left_thigh_found"/>
     <contact geom1="matt_right_hand_collision" geom2="matt_right_thigh" reduce="mindist" name="matt_right_hand_right_thigh_found"/>
+    <gyro site="stroller_imu" name="stroller_gyro"/>
+    <velocimeter site="stroller_imu" name="stroller_local_linvel"/>
+    <framezaxis objtype="site" objname="stroller_imu" name="stroller_upvector"/>
+    <framelinvel objtype="site" objname="stroller_imu" name="stroller_global_linvel"/>
+    <frameangvel objtype="site" objname="stroller_imu" name="stroller_global_angvel"/>
   </sensor>
 
   <keyframe>
-    <key name="matt_home" qpos="-40 -40 5.715 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.9636 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -0.3 0 -0.15 0 0 0 0 0.3 0 -0.15 0 0 0" ctrl="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -0.3 0 -0.15 0 0 0 0 0.3 0 -0.15 0 0 0"/>
-    <key name="matt_knees_bent" qpos="-40 -40 5.715 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.9265 1 0 0 0 -0.25 0 0 0.5 -0.25 0 -0.25 0 0 0.5 -0.25 0 0 0 0 0 -0.3 0 -0.3 0 0 0 0 0.3 0 -0.3 0 0 0" ctrl="0 0 0 0 0 0 0 0 0 0 0 0 -0.25 0 0 0.5 -0.25 0 -0.25 0 0 0.5 -0.25 0 0 0 0 0 -0.3 0 -0.3 0 0 0 0 0.3 0 -0.3 0 0 0"/>
+    <key name="matt_home" qpos="-40 -40 5.715 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.9636 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -0.3 0 -0.15 0 0 0 0 0.3 0 -0.15 0 0 0 -40 -34 5.004 1 0 0 0 0 0 0 0" ctrl="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -0.3 0 -0.15 0 0 0 0 0.3 0 -0.15 0 0 0 0 0 0"/>
+    <key name="matt_knees_bent" qpos="-40 -40 5.715 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.9265 1 0 0 0 -0.25 0 0 0.5 -0.25 0 -0.25 0 0 0.5 -0.25 0 0 0 0 0 -0.3 0 -0.3 0 0 0 0 0.3 0 -0.3 0 0 0 -40 -34 5.004 1 0 0 0 0 0 0 0" ctrl="0 0 0 0 0 0 0 0 0 0 0 0 -0.25 0 0 0.5 -0.25 0 -0.25 0 0 0.5 -0.25 0 0 0 0 0 -0.3 0 -0.3 0 0 0 0 0.3 0 -0.3 0 0 0 0 0 0"/>
+    <key name="stroller_home" qpos="-40 -40 5.715 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -40 -37 6.89325 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.002 1 0 0 0 0 0 0 0"/>
   </keyframe>
 </mujoco>

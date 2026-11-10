@@ -137,7 +137,7 @@ void ARaceHUD::BuildMenu()
 				[Tr] { return Tr.bBuilt; }, 420.f)];
 	}
 
-	TSharedRef<SWrapBox> Chips = SNew(SWrapBox).PreferredSize(560.f).InnerSlotPadding(FVector2D(6.f, 6.f));	// its own width: a height to match its rows
+	TSharedRef<SWrapBox> Chips = SNew(SWrapBox).PreferredSize(620.f).InnerSlotPadding(FVector2D(6.f, 6.f));	// its own width: a height to match its rows
 	for (const FRaceRacerInfo& R0 : Roster)
 	{
 		const FRaceRacerInfo R = R0;
@@ -182,7 +182,8 @@ void ARaceHUD::BuildMenu()
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 0.f, 0.f, 4.f)[Label(T(TEXT("TRACK")), 14, FSlateColor(Dim))]
 			+ SVerticalBox::Slot().AutoHeight()[TrackList]
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 16.f, 0.f, 4.f)[Label(T(TEXT("RACERS")), 14, FSlateColor(Dim))]
-			+ SVerticalBox::Slot().AutoHeight()[Chips]
+			// a fixed width: three chips a row (a chip is ~198 px with its button padding); five racers in pairs overflowed 16:9
+			+ SVerticalBox::Slot().AutoHeight()[SNew(SBox).WidthOverride(620.f)[Chips]]
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 16.f, 0.f, 0.f)[LapsRow]
 			+ SVerticalBox::Slot().AutoHeight().Padding(0.f, 20.f, 0.f, 0.f).HAlign(HAlign_Center)
 				[Button(Label(T(TEXT("START")), 24, FSlateColor(Gold)), [Self] { if (Self.IsValid()) Self->Start(); },

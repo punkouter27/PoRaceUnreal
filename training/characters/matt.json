@@ -59,5 +59,7 @@
  ],
  "_footGeoms_note": "Foot geoms (without the racer prefix): the contact audit holds feet on the floor to a tighter limit than other contacts.",
  "pace": 0.92,
- "_pace_note": "Share of the commanded cruise speed this racer actually holds over a race (Planar Sprint reference races, Slice 5). The handicap's head starts use cruise x pace, so racers are expected home together."
+ "_pace_note": "Share of the commanded cruise speed this racer actually holds over a race (Planar Sprint reference races, Slice 5). The handicap's head starts use cruise x pace, so racers are expected home together.",
+ "width": 0.55,
+ "_width_note": "Body width across the track (m), arms at the sides: the tactics keep (width + other's) / 2 + 0.2 m beside another racer when passing or blocking (never less than Unity's 0.65)."
 }

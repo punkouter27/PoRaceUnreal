@@ -253,6 +253,63 @@ for r in FP["racers"]:
     comp.set_material(0, mat)
     log(f"{card['racerName']}: visual placed (bones are matched at run time: ARacerVisual logs any it cannot find)")
 
+
+def stroller_skin(card):
+    """The stroller's scan (Content/Art/Stroller/SK_Stroller.fbx: root + one bone per wheel) as a skeletal mesh with
+    no physics asset (MuJoCo owns the body; its README's Chaos vehicle setup is not used) and a material from its 4K
+    diffuse and normal maps. Imported once into /Game/Racers/Stroller/; RACE_REIMPORT=1 redoes it."""
+    name = card["racerName"]
+    folder, mesh_path, mat_path = f"/Game/Racers/{name}", f"/Game/Racers/{name}/SK_{name}", f"/Game/Racers/{name}/M_{name}"
+    if os.environ.get("RACE_REIMPORT") != "1" and ASSETS.does_asset_exist(mesh_path) and ASSETS.does_asset_exist(mat_path):
+        return ASSETS.load_asset(mesh_path), ASSETS.load_asset(mat_path)
+    fbx = unreal.FbxImportUI()
+    for k, v in (("import_mesh", True), ("import_as_skeletal", True), ("import_materials", False), ("import_textures", False),
+                 ("import_animations", False), ("create_physics_asset", False), ("mesh_type_to_import", unreal.FBXImportType.FBXIT_SKELETAL_MESH)):
+        fbx.set_editor_property(k, v)
+    t = unreal.AssetImportTask()
+    t.filename, t.destination_path, t.destination_name = os.path.join(PROJ, card["visualMesh"]), folder, f"SK_{name}"
+    t.automated, t.replace_existing, t.save, t.options = True, True, True, fbx
+    tools.import_asset_tasks([t])
+    mesh = next(ASSETS.load_asset(x) for x in t.imported_object_paths if isinstance(ASSETS.load_asset(x), unreal.SkeletalMesh))
+    log(f"{name}: skeletal mesh {mesh.get_path_name()}")
+    tex = {key: import_file(f"Content/Art/Stroller/Textures/T_Stroller_{suffix}.jpg", f"{folder}/Textures", f"T_{name}_{key}")[0]
+           for key, suffix in (("color", "D"), ("normal", "N"))}
+    tex["normal"].set_editor_property("compression_settings", unreal.TextureCompressionSettings.TC_NORMALMAP)
+    tex["normal"].set_editor_property("srgb", False)
+    for t2 in tex.values():
+        ASSETS.save_loaded_asset(t2)
+    if ASSETS.does_asset_exist(mat_path):
+        ASSETS.delete_asset(mat_path)
+    mat = tools.create_asset(f"M_{name}", folder, unreal.Material, unreal.MaterialFactoryNew())
+    mat.set_editor_property("used_with_skeletal_mesh", True)
+    for y, (key, prop) in enumerate((("color", unreal.MaterialProperty.MP_BASE_COLOR), ("normal", unreal.MaterialProperty.MP_NORMAL))):
+        smp = MEL.create_material_expression(mat, unreal.MaterialExpressionTextureSample, -400, 250 * y)
+        smp.set_editor_property("texture", tex[key])
+        if key == "normal":
+            smp.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
+        MEL.connect_material_property(smp, "RGB", prop)
+    rough = MEL.create_material_expression(mat, unreal.MaterialExpressionConstant, -400, 520)
+    rough.set_editor_property("r", 0.7)
+    MEL.connect_material_property(rough, "", unreal.MaterialProperty.MP_ROUGHNESS)
+    MEL.recompile_material(mat)
+    ASSETS.save_loaded_asset(mat)
+    return mesh, mat
+
+
+# ---- the stroller: its scan, riding the chassis body, wheels turned by their bodies (ARacerVisualStroller)
+for r in FP["racers"]:
+    card = json.loads(open(os.path.join(PROJ, f"training/characters/{r['card']}.json"), encoding="utf-8").read())
+    if card.get("kind") != "stroller":
+        continue
+    mesh, mat = stroller_skin(card)
+    v = spawn(unreal.RacerVisualStroller, f"{card['racerName']}Visual")
+    v.set_editor_property("prefix", r["prefix"])
+    comp = v.get_component_by_class(unreal.PoseableMeshComponent)
+    comp.set_skinned_asset_and_update(mesh)
+    for i in range(max(1, len(mesh.materials))):
+        comp.set_material(i, mat)
+    log(f"{card['racerName']}: visual placed ({len(mesh.materials)} material slots)")
+
 # ---- light and air
 sun = spawn(unreal.DirectionalLight, "Sun", rot=(-42, 35, 0))
 sun.light_component.set_editor_property("intensity", 7.0)

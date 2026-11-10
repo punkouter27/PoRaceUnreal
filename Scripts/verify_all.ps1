@@ -38,6 +38,7 @@ try {
     Step "contract" "Generated contract files are up to date" { & uv @Py contract.py --check }
     Step "brains" "Go2 brains pass their rungs on this MuJoCo" { & uv @Py version_check.py }
     Step "brains" "Matt's brain reproduces his training run and passes his rungs" { & uv @Py human_check.py --creature matt }
+    Step "brains" "The stroller's brain passes its ladder (hold, straight, turns, reverse, 100 race-range runs)" { & uv @Py stroller/sim.py ladder }
     Step "race" "Rules self test: tactics (pass, avoid, block, hold a pass) and the yellow flag" { & uv @Py selftest.py }
     Step "race" "Reference races: Planar Sprint (Blue + Matt, a flip, Matt flipped alone), Flat Oval 2 laps, with the handicap and the contact gate" {
         & uv @Py race.py planar_sprint --seed 1

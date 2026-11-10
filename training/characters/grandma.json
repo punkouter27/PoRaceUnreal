@@ -24,5 +24,7 @@
  ],
  "terrains": [
   "flat"
- ]
+ ],
+ "width": 0.5,
+ "_width_note": "Body width across the track (m), arms at the sides: the tactics keep (width + other's) / 2 + 0.2 m beside another racer when passing or blocking (never less than Unity's 0.65)."
 }

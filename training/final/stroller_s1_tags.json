@@ -1,0 +1,14 @@
+{
+ "creature": "scene_stroller",
+ "physics": "401ef0e825b159d1",
+ "interface": "4b3c39e3228d9195",
+ "obs_size": 20,
+ "act_size": 3,
+ "ctrl_dt": 0.02,
+ "sim_dt": 0.004,
+ "nq": 11,
+ "nv": 10,
+ "nu": 3,
+ "clock": {},
+ "problems": []
+}

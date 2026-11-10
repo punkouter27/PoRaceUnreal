@@ -252,13 +252,14 @@ double FRaceRules::Tactic(int32 i, double Line)
 		const bool bDown = O.State != ERacerState::Racing;
 		// a pass under way holds until the passer is PassClear ahead, with the side window widened by the gap (race.py)
 		const bool bHeld = k == R.Passing;
-		if (Ds <= (bHeld ? -PassClear : 0.0) || Ds > (bDown ? 5.0 : 2.5) || std::abs(O.Lateral - Me) > (bDown ? 0.8 : 0.55) + (bHeld ? PassGap : 0.0)) continue;
+		const double Window = bDown ? 0.8 : std::max(0.55, 0.5 * (R.Width + O.Width) + 0.1);	// "in the way": Unity's 0.55, wider for wide bodies
+		if (Ds <= (bHeld ? -PassClear : 0.0) || Ds > (bDown ? 5.0 : 2.5) || std::abs(O.Lateral - Me) > Window + (bHeld ? SideGap(R, O, PassGap) : 0.0)) continue;
 		if ((bDown || O.Speed * O.Pace < R.Speed * R.Pace - 0.01) && Ds < BestGap) { BestGap = Ds; Block = k; }	// slower: at the pace it holds
 	}
 	if (Block >= 0)
 	{
 		const FRaceEntry& B = Entries[Block];
-		const double Gap = B.State != ERacerState::Racing ? AvoidGap : PassGap;
+		const double Gap = SideGap(R, B, B.State != ERacerState::Racing ? AvoidGap : PassGap);
 		const double Lft = B.Lateral + Gap, Rgt = B.Lateral - Gap;
 		const double RoomL = Lft <= Edge ? Room(i, Lft) : -1.0;
 		const double RoomR = Rgt >= -Edge ? Room(i, Rgt) : -1.0;
@@ -281,8 +282,24 @@ double FRaceRules::Tactic(int32 i, double Line)
 			if (Behind > 0.0 && Behind < 1.5)
 			{
 				R.Intent = TEXT("BLOCK");
-				return std::min(std::max(Line + (P.Lateral - Line) * 0.4, -Edge), Edge);
+				// Unity: 40 % of the way to the attacker's lateral; never closer than the side gap (race.py)
+				double T = Line + (P.Lateral - Line) * 0.4;
+				const double G = SideGap(R, P, PassGap);
+				if (std::abs(T - P.Lateral) < G) T = P.Lateral + std::copysign(G, Me - P.Lateral);
+				return std::min(std::max(T, -Edge), Edge);
 			}
+		}
+	}
+	// side by side: keep the gap on its own side rather than follow a lane squeeze into the other racer (race.py)
+	for (int32 k = 0; k < Entries.Num(); ++k)
+	{
+		const FRaceEntry& O = Entries[k];
+		if (k == i || O.FinishTime >= 0.0 || O.State != ERacerState::Racing || std::abs(O.Distance - R.Distance) >= Alongside) continue;
+		const double G = SideGap(R, O, PassGap);
+		if (std::abs(Line - O.Lateral) < G)
+		{
+			R.Intent = TEXT("ALONGSIDE");
+			return std::min(std::max(O.Lateral + std::copysign(G, Me - O.Lateral), -Edge), Edge);
 		}
 	}
 	R.Intent.Reset();
@@ -480,7 +497,7 @@ FString FRaceRules::ResultLine() const
 TArray<FString> FRaceRules::SelfTest()
 {
 	TArray<FString> Out;
-	struct FRow { const TCHAR* Name; double Distance, Lateral, Speed, Aggression; ERacerState State; int32 Passing; };
+	struct FRow { const TCHAR* Name; double Distance, Lateral, Speed, Aggression; ERacerState State; int32 Passing; double Width = 0.35; };
 	struct FCase { const TCHAR* Name; double HalfWidth; int32 Who; double Line; TArray<FRow> Rows; };
 	const ERacerState Ok = ERacerState::Racing;
 	const TArray<FCase> Cases = {
@@ -489,6 +506,8 @@ TArray<FString> FRaceRules::SelfTest()
 		{ TEXT("avoid"), 1.5, 0, 0.0, { { TEXT("A"), 10.0, 0.0, 1.5, 0.2, Ok, -1 }, { TEXT("B"), 14.0, 0.5, 1.6, 0.2, ERacerState::Fallen, -1 } } },
 		{ TEXT("pass-hold"), 2.0, 0, 0.4, { { TEXT("A"), 10.3, 0.55, 1.5, 0.2, Ok, 1 }, { TEXT("B"), 10.0, -0.05, 1.3, 0.2, Ok, -1 } } },
 		{ TEXT("pass-done"), 2.0, 0, 0.4, { { TEXT("A"), 11.1, 0.55, 1.5, 0.2, Ok, 1 }, { TEXT("B"), 10.0, -0.05, 1.3, 0.2, Ok, -1 } } },
+		{ TEXT("pass-wide"), 1.5, 0, 0.0, { { TEXT("S"), 10.0, 0.0, 1.5, 0.2, Ok, -1, 0.65 }, { TEXT("B"), 11.5, 0.1, 1.2, 0.2, Ok, -1, 0.35 } } },
+		{ TEXT("alongside"), 1.5, 0, 0.0, { { TEXT("S"), 10.0, 0.1, 1.45, 0.2, Ok, -1, 0.65 }, { TEXT("B"), 10.3, -0.1, 1.45, 0.2, Ok, -1, 0.35 } } },
 		{ TEXT("faster-ahead"), 1.5, 0, 0.0, { { TEXT("A"), 10.0, 0.0, 1.2, 0.2, Ok, -1 }, { TEXT("B"), 11.0, 0.0, 1.5, 0.2, Ok, -1 } } },
 		{ TEXT("block"), 1.5, 0, 0.3, { { TEXT("C"), 20.0, 0.3, 1.2, 0.8, Ok, -1 }, { TEXT("D"), 19.0, -0.2, 1.5, 0.2, Ok, 0 } } },
 		{ TEXT("no-block-timid"), 1.5, 0, 0.3, { { TEXT("C"), 20.0, 0.3, 1.2, 0.3, Ok, -1 }, { TEXT("D"), 19.0, -0.2, 1.5, 0.2, Ok, 0 } } },
@@ -503,7 +522,7 @@ TArray<FString> FRaceRules::SelfTest()
 		{
 			FRaceEntry& E = R.Entries.AddDefaulted_GetRef();
 			E.Name = W.Name; E.Distance = W.Distance; E.Lateral = W.Lateral; E.Speed = W.Speed; E.Aggression = W.Aggression;
-			E.State = W.State; E.Passing = W.Passing;
+			E.State = W.State; E.Passing = W.Passing; E.Width = W.Width;
 		}
 		const double V = R.Tactic(C.Who, C.Line);
 		const FRaceEntry& E = R.Entries[C.Who];

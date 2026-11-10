@@ -32,6 +32,8 @@ PASS_CLEAR = 1.0           # m ahead of it before a pass lets go
 AVOID_GAP = 0.85           # m beside a racer that is down
 MARGIN = 0.45              # m kept from the rail
 OVERTAKE_HYST = 0.25       # m: a pair must be this far apart to count who is ahead
+CLEARANCE = 0.2            # m between two bodies side by side: gap = half widths + this, never under Unity's gaps
+ALONGSIDE = 0.8            # m along the track: closer than this, two racers are side by side
 
 # Yellow flag (Unity proposals r3 A3)
 YELLOW_SCALE = 0.8
@@ -57,6 +59,7 @@ class Entry:
   impratio: float = 100.0       # the impratio its brain was trained at (the race runs at the grid's lowest)
   feet: tuple = ()              # foot geom names (prefixed), for the contact audit
   pace: float = 1.0             # share of the commanded speed it holds over a race (card 'pace'): the handicap's expectation
+  width: float = 0.35           # body width across the track (card 'width'): the tactics' gaps grow with it
   lane: float = 0.0
   speed: float = 0.0
   aggression: float = 0.0
@@ -124,6 +127,11 @@ def room(entries, i, lat):
   return best
 
 
+def side_gap(a, b, base):
+  """Centre-to-centre distance to keep beside another racer: Unity's gap, or wider for wide bodies (the stroller)."""
+  return max(base, 0.5 * (a.width + b.width) + CLEARANCE)
+
+
 def tactic(entries, i, line, half_width):
   """Where racer i wants to be across the track (lateral, + left). Pass a slower or fallen racer up to 2.5 m (5 m if it
   is down) ahead and in the way, on the side with more room; an aggressive racer with an attacker within 1.5 m behind
@@ -141,13 +149,14 @@ def tactic(entries, i, line, half_width):
     # a pass under way holds until the passer is PASS_CLEAR ahead, with the side window widened by the gap: without it
     # the passer drifted back once 0.55 m aside and cut across the slower racer's nose (Flat Oval handicap seed 1)
     held = k == r.passing
-    if ds <= (-PASS_CLEAR if held else 0.0) or ds > (5.0 if down else 2.5) or abs(o.lateral - me) > (0.8 if down else 0.55) + (PASS_GAP if held else 0.0):
+    window = 0.8 if down else max(0.55, 0.5 * (r.width + o.width) + 0.1)   # "in the way": Unity's 0.55, wider for wide bodies
+    if ds <= (-PASS_CLEAR if held else 0.0) or ds > (5.0 if down else 2.5) or abs(o.lateral - me) > window + (side_gap(r, o, PASS_GAP) if held else 0.0):
       continue
     if (down or o.speed * o.pace < r.speed * r.pace - 0.01) and ds < best_gap:   # slower: at the pace it holds
       best_gap, block = ds, k
   if block >= 0:
     b = entries[block]
-    gap = AVOID_GAP if b.state != RACING else PASS_GAP
+    gap = side_gap(r, b, AVOID_GAP if b.state != RACING else PASS_GAP)
     lft, rgt = b.lateral + gap, b.lateral - gap
     room_l = room(entries, i, lft) if lft <= edge else -1.0
     room_r = room(entries, i, rgt) if rgt >= -edge else -1.0
@@ -164,7 +173,23 @@ def tactic(entries, i, line, half_width):
       behind = r.distance - p.distance
       if 0.0 < behind < 1.5:
         r.intent = "BLOCK"
-        return min(max(line + (p.lateral - line) * 0.4, -edge), edge)
+        # Unity: 40 % of the way to the attacker's lateral. Never closer than the side gap: blocking by leaning on a
+        # wider racer kept Blue and the stroller in contact for most of a race (Flat Oval seed 1, 909 bumps)
+        t = line + (p.lateral - line) * 0.4
+        g = side_gap(r, p, PASS_GAP)
+        if abs(t - p.lateral) < g:
+          t = p.lateral + math.copysign(g, me - p.lateral)
+        return min(max(t, -edge), edge)
+  # Side by side: keep the gap on its own side rather than follow a lane squeeze into the other racer. Unity's rules
+  # only look ahead; with a 0.65 m stroller two racers level with each other rubbed for half a race (Planar Sprint
+  # seed 2: Blue against the stroller's seat for 26 s).
+  for k, o in enumerate(entries):
+    if k == i or o.finish_time >= 0 or o.state != RACING or abs(o.distance - r.distance) >= ALONGSIDE:
+      continue
+    g = side_gap(r, o, PASS_GAP)
+    if abs(line - o.lateral) < g:
+      r.intent = "ALONGSIDE"
+      return min(max(o.lateral + math.copysign(g, me - o.lateral), -edge), edge)
   r.intent = ""
   return line
 
