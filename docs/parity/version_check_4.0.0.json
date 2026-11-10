@@ -1,0 +1,89 @@
+{
+ "mujoco": "4.0.0",
+ "rows": [
+  {
+   "group": "replay",
+   "name": "reference_trajectory",
+   "ok": true,
+   "gate": false,
+   "note": "|dqpos| after 0.2 s 6.7e-16, 1 s 2.4e-14, 5 s 6.2e-13; under 1 mm for 5.00 s"
+  },
+  {
+   "group": "closed",
+   "name": "go2_loco cmd 0.5",
+   "ok": true,
+   "gate": true,
+   "note": "vx 0.407 (rec 0.410), cadence 1.66 Hz (1.66), |force| 3.66 N.m (3.60), upright True, brain vs recorded action 7.5e-07"
+  },
+  {
+   "group": "replay",
+   "name": "reference_fast",
+   "ok": true,
+   "gate": false,
+   "note": "|dqpos| after 0.2 s 1.3e-14, 1 s 8.0e-14, 5 s 1.5e-12; under 1 mm for 5.00 s"
+  },
+  {
+   "group": "closed",
+   "name": "go2_loco_fast cmd 2.0",
+   "ok": true,
+   "gate": true,
+   "note": "vx 1.936 (rec 1.936), cadence 3.71 Hz (3.71), |force| 6.23 N.m (6.23), upright True, brain vs recorded action 1.9e-06"
+  },
+  {
+   "group": "replay",
+   "name": "reference_steeple",
+   "ok": true,
+   "gate": false,
+   "note": "|dqpos| after 0.2 s 7.3e-15, 1 s 6.7e-14, 5 s 9.6e-13; under 1 mm for 5.00 s"
+  },
+  {
+   "group": "closed",
+   "name": "go2_loco_steeple cmd 1.5",
+   "ok": true,
+   "gate": true,
+   "note": "vx 1.316 (rec 1.316), cadence 2.61 Hz (2.61), |force| 5.00 N.m (5.00), upright True, brain vs recorded action 1.3e-06"
+  },
+  {
+   "group": "rung",
+   "name": "R0 stand go2_loco",
+   "ok": true,
+   "gate": true,
+   "note": "10/10 (need 10), worst velocity error 0.00 m/s, mean vx -0.00"
+  },
+  {
+   "group": "rung",
+   "name": "R1 track go2_loco",
+   "ok": true,
+   "gate": true,
+   "note": "10/10 (need 10), worst velocity error 0.15 m/s, mean vx 0.81"
+  },
+  {
+   "group": "rung",
+   "name": "R1 track go2_loco_steeple",
+   "ok": true,
+   "gate": true,
+   "note": "10/10 (need 10), worst velocity error 0.12 m/s, mean vx 0.94"
+  },
+  {
+   "group": "rung",
+   "name": "R1 track go2_loco_bank",
+   "ok": true,
+   "gate": true,
+   "note": "10/10 (need 10), worst velocity error 0.16 m/s, mean vx 0.88"
+  },
+  {
+   "group": "rung",
+   "name": "speed go2_loco_fast",
+   "ok": true,
+   "gate": true,
+   "note": "10/10 (need 9), worst velocity error 0.17 m/s, mean vx 2.20"
+  },
+  {
+   "group": "getup",
+   "name": "R3 go2_getup",
+   "ok": true,
+   "gate": true,
+   "note": "9/10 (need 9), mean time to stand 1.52 s"
+  }
+ ]
+}
