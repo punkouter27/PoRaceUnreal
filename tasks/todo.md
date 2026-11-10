@@ -17,17 +17,19 @@ Plan approved 2026-11-10.
 - [x] 0.10 First commit; salvage check 48/48 → owner may delete `PoRace/`
 
 ## Slice 1 — Physics parity for Blue
-- [ ] 1.1 Create `PoRaceUnreal.uproject` (UE 5.8, C++ module, plugins as PoSlapUnreal)
-- [ ] 1.0 Trainer to MuJoCo 4.0.0; re-run Blue's ladder rungs in Python; retrain any brain that fails
-- [ ] 1.2 `Scripts/setup_urlab.ps1`: clone URLab, apply `urlab_porace.patch`, MuJoCo 4.0.0, build third party
-- [ ] 1.3 `training/contract.py` + generator for `RaceContract.gen.h`
-- [ ] 1.4 Import Go2 into a testbed level by script; marker check
-- [ ] 1.5 Model readback against the source model
-- [ ] 1.6 `URacerController` + `Go2Brain` + `URaceBrainIO` (hold home pose, then ONNX)
-- [ ] 1.7 Zero-brain hold gate
-- [ ] 1.8 Replay gate (`-Replay`)
-- [ ] 1.9 Closed-loop gate
-- [ ] 1.10 No-Chaos assert; `Scripts/verify_all.ps1 -Only parity`
+- [x] 1.0 MuJoCo 4.0.0: all six Go2 brains pass their rungs on it in Python (`training/version_check.py`); no retraining needed
+- [x] 1.1 `PoRaceUnreal.uproject` (UE 5.8, C++ module `PoRaceUnreal`, URLab + NNE ORT + Basic CPU)
+- [x] 1.2 `Scripts/setup_urlab.ps1` + `Plugins/urlab_porace.patch` (PoSlap's 8 patches + MuJoCo 4.0.0 pin + MuJoCo 4 API fixes)
+- [x] 1.3 `training/contract.py` → `training/models/go2_fingerprint.json` + `Source/PoRaceUnreal/RaceContract.gen.h`
+- [x] 1.4 Go2 imported into `/Game/Levels/L_Testbed` by `Scripts/build_testbed.py`
+- [ ] 1.4b Coordinate marker check (MuJoCo → Unreal cm, Y mirrored): moved to Slice 2, where the visuals are first drawn
+- [x] 1.5 Model readback: 140 physics arrays, 0 differ (after URacerController writes the training numbers back; see `docs/20261110/slice1.md`)
+- [x] 1.6 `URacerController` (observation, brain via NNE ORT, action map; replay and recording)
+- [x] 1.7 Hold gate: 0 difference over 2 s
+- [x] 1.8 Replay gate: 0 difference over 5 s
+- [x] 1.9 Closed-loop gate: 0.000 cm after 5 s; brain output identical to onnxruntime
+- [x] 1.10 `Scripts/verify_all.ps1 [-Unreal | -Only parity]`
+- [ ] 1.10b Runtime no-Chaos assert (the testbed script turns Chaos off; nothing checks it at run time yet): moved to Slice 2
 
 ## Slice 2 — One race, one racer
 - [ ] 2.1 `training/build_track_model.py` (centre line → rails) and `Scripts/build_track.py`

@@ -37,20 +37,54 @@ class Policy:
     return self.session.run(None, {self.input: obs.reshape(1, -1).astype(np.float32)})[0].reshape(-1)
 
 
+def find(m, objtype, count, short):
+  """Id of the object named `short`, or carrying it as a "_"-suffix (URLab prefixes names with the actor's). -1 = none."""
+  for i in range(count):
+    name = mujoco.mj_id2name(m, objtype, i) or ""
+    if name == short or name.endswith("_" + short):
+      return i
+  return -1
+
+
+def qpos_slot(m, slot):
+  """qpos address of a slot as contract.py names it: "joint", "joint[k]" or "@body[k]" (RaceNames.h QposSlot)."""
+  base, k = (slot[:slot.rindex("[")], int(slot[slot.rindex("[") + 1:-1])) if slot.endswith("]") else (slot, 0)
+  if base.startswith("@"):
+    b = find(m, mujoco.mjtObj.mjOBJ_BODY, m.nbody, base[1:])
+    j = m.body_jntadr[b] if b >= 0 and m.body_jntnum[b] > 0 else -1
+  else:
+    j = find(m, mujoco.mjtObj.mjOBJ_JOINT, m.njnt, base)
+  return int(m.jnt_qposadr[j]) + k if j >= 0 else -1
+
+
 class Go2Sim:
-  def __init__(self, scene=C.SCENE_XML):
-    self.m = mujoco.MjModel.from_xml_path(str(scene))
-    self.d = mujoco.MjData(self.m)
-    self.imu = self.m.site(C.IMU_SITE).id
-    self.base = self.m.body(C.ROOT_BODY).id
-    self.adr_linvel = int(self.m.sensor_adr[self.m.sensor(C.LOCAL_LINVEL_SENSOR).id])
-    self.adr_gyro = int(self.m.sensor_adr[self.m.sensor(C.GYRO_SENSOR).id])
+  def __init__(self, scene=C.SCENE_XML, model=None, home=None):
+    """`model`: a compiled model to drive instead of the scene file (URLab's .mjb, names prefixed).
+    `home`: {qpos address: value} start pose for a model without the "home" keyframe."""
+    self.m = model if model is not None else mujoco.MjModel.from_xml_path(str(scene))
+    m, T = self.m, mujoco.mjtObj
+    self.d = mujoco.MjData(m)
+    self.home = home
+    self.imu = find(m, T.mjOBJ_SITE, m.nsite, C.IMU_SITE)
+    self.act = np.array([find(m, T.mjOBJ_ACTUATOR, m.nu, a) for a in C.ACTUATOR_NAMES])
+    joints = [find(m, T.mjOBJ_JOINT, m.njnt, j) for j in C.JOINT_NAMES]
+    self.qadr, self.vadr = m.jnt_qposadr[joints], m.jnt_dofadr[joints]
+    root = m.body_jntadr[find(m, T.mjOBJ_BODY, m.nbody, C.ROOT_BODY)]
+    self.root_q, self.root_v = int(m.jnt_qposadr[root]), int(m.jnt_dofadr[root])
+    self.adr_linvel = int(m.sensor_adr[find(m, T.mjOBJ_SENSOR, m.nsensor, C.LOCAL_LINVEL_SENSOR)])
+    self.adr_gyro = int(m.sensor_adr[find(m, T.mjOBJ_SENSOR, m.nsensor, C.GYRO_SENSOR)])
+    assert min(self.imu, self.act.min(), min(joints), root) >= 0, "model is missing a contract name"
     self.reset()
 
   def reset(self):
-    mujoco.mj_resetDataKeyframe(self.m, self.d, 0)
+    if self.home is None:
+      mujoco.mj_resetDataKeyframe(self.m, self.d, 0)
+    else:
+      mujoco.mj_resetData(self.m, self.d)
+      for adr, value in self.home.items():
+        self.d.qpos[adr] = value
+    self.d.ctrl[self.act] = DEFAULT
     mujoco.mj_forward(self.m, self.d)
-    self.d.ctrl[:] = DEFAULT
     self.last_action = np.zeros(C.NU, np.float32)
     self.command = np.zeros(3, np.float32)
 
@@ -71,12 +105,12 @@ class Go2Sim:
   # --- observations ----------------------------------------------------------------------------------------------
   def obs_joystick(self):
     d = self.d
-    return np.concatenate([self.local_linvel(), self.gyro(), self.gravity(), d.qpos[Q] - DEFAULT, d.qvel[V],
+    return np.concatenate([self.local_linvel(), self.gyro(), self.gravity(), d.qpos[self.qadr] - DEFAULT, d.qvel[self.vadr],
                            self.last_action, self.command]).astype(np.float32)
 
   def obs_getup(self):
     d = self.d
-    return np.concatenate([self.gyro(), self.gravity(), d.qpos[Q] - DEFAULT, d.qvel[V], self.last_action]).astype(np.float32)
+    return np.concatenate([self.gyro(), self.gravity(), d.qpos[self.qadr] - DEFAULT, d.qvel[self.vadr], self.last_action]).astype(np.float32)
 
   # --- stepping --------------------------------------------------------------------------------------------------
   def physics(self, n=C.DECIMATION):
@@ -88,7 +122,7 @@ class Go2Sim:
     self.command = self.command + np.clip(target - self.command, -C.CMD_SLEW_STEP, C.CMD_SLEW_STEP)
     obs = self.obs_joystick()
     action = np.clip(policy(obs), -1, 1).astype(np.float32)
-    self.d.ctrl[:] = (DEFAULT + C.ACTION_SCALE * action).astype(np.float32)
+    self.d.ctrl[self.act] = (DEFAULT + C.ACTION_SCALE * action).astype(np.float32)
     self.physics()
     self.last_action = action
     return obs, action
@@ -96,7 +130,7 @@ class Go2Sim:
   def step_getup(self, policy):
     obs = self.obs_getup()
     action = np.clip(policy(obs), -1, 1).astype(np.float32)
-    self.d.ctrl[:] = (self.d.qpos[Q].astype(np.float32) + C.ACTION_SCALE * action).astype(np.float32)
+    self.d.ctrl[self.act] = (self.d.qpos[self.qadr].astype(np.float32) + C.ACTION_SCALE * action).astype(np.float32)
     self.physics()
     self.last_action = action
     return obs, action

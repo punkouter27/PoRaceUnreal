@@ -1,0 +1,792 @@
+From af0e7f4d6c1a6fb09f1f8d5935d0921e7c6084fe Mon Sep 17 00:00:00 2001
+From: PoSlap <punkouter26@gmail.com>
+Date: Wed, 21 Oct 2026 14:28:05 -0400
+Subject: [PATCH 01/10] Pin MuJoCo to 3.10.0 (match PoSlap trainer)
+
+---
+ third_party/MuJoCo/src | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/third_party/MuJoCo/src b/third_party/MuJoCo/src
+index 67a1ea6..28009f9 160000
+--- a/third_party/MuJoCo/src
++++ b/third_party/MuJoCo/src
+@@ -1 +1 @@
+-Subproject commit 67a1ea6dca4cd8f2c4d17ec5df8a3a5792a3d170
++Subproject commit 28009f9105cd92784b7b0b30c0605a5e29107a77
+-- 
+2.56.0.windows.4
+
+
+From 4623bdef3a8f44841b3d4b8e9b18e71bc7660910 Mon Sep 17 00:00:00 2001
+From: PoSlap <punkouter26@gmail.com>
+Date: Wed, 21 Oct 2026 14:50:39 -0400
+Subject: [PATCH 02/10] UE 5.8: JSON object keys are FSharedString
+
+---
+ .../URLab/Private/Bridge/MsgpackHelpers.cpp   |  2 +-
+ Source/URLab/Private/Bridge/RpcDispatcher.cpp | 22 +++++++++----------
+ 2 files changed, 12 insertions(+), 12 deletions(-)
+
+diff --git a/Source/URLab/Private/Bridge/MsgpackHelpers.cpp b/Source/URLab/Private/Bridge/MsgpackHelpers.cpp
+index 117dbd5..1573cdc 100644
+--- a/Source/URLab/Private/Bridge/MsgpackHelpers.cpp
++++ b/Source/URLab/Private/Bridge/MsgpackHelpers.cpp
+@@ -73,7 +73,7 @@ void PackJsonObjectInner(clmdep_msgpack::packer<Stream>& Packer,
+ 	Packer.pack_map(Obj->Values.Num());
+ 	for (const auto& Kv : Obj->Values)
+ 	{
+-		const FString& Key = Kv.Key;
++		const FString Key(*Kv.Key);  // UE 5.8: JSON keys are FSharedString
+ 		// Special-case keys with kBinSuffix: emit real msgpack bin rather
+ 		// than the base64-as-string form the JSON tree carries.
+ 		if (Key.EndsWith(kBinSuffix, ESearchCase::CaseSensitive))
+diff --git a/Source/URLab/Private/Bridge/RpcDispatcher.cpp b/Source/URLab/Private/Bridge/RpcDispatcher.cpp
+index 9758d6f..2f812b9 100644
+--- a/Source/URLab/Private/Bridge/RpcDispatcher.cpp
++++ b/Source/URLab/Private/Bridge/RpcDispatcher.cpp
+@@ -994,12 +994,12 @@ TSharedPtr<FJsonObject> FURLabRpcDispatcher::HandleStep(const TSharedPtr<FJsonOb
+ 
+ 				FString CtlMode;
+ 				if ((*ArtObj)->TryGetStringField(TEXT("control_mode"), CtlMode))
+-					TmpReq.PerArticulationControlMode.Add(Pair.Key, CtlMode);
++					TmpReq.PerArticulationControlMode.Add(FString(*Pair.Key), CtlMode);
+ 
+ 				const TArray<TSharedPtr<FJsonValue>>* CtrlList = nullptr;
+ 				if ((*ArtObj)->TryGetArrayField(TEXT("ctrl"), CtrlList) && CtrlList)
+ 				{
+-					if (AMjArticulation* Art = Cast<AMjArticulation>(Mgr->GetArticulation(Pair.Key)))
++					if (AMjArticulation* Art = Cast<AMjArticulation>(Mgr->GetArticulation(FString(*Pair.Key))))
+ 					{
+ 						TArray<UMjActuator*> Acts = Art->GetActuators();
+ 						for (int32 i = 0; i < CtrlList->Num() && i < Acts.Num(); ++i)
+@@ -1011,7 +1011,7 @@ TSharedPtr<FJsonObject> FURLabRpcDispatcher::HandleStep(const TSharedPtr<FJsonOb
+ 							FString Prefix = Art->GetName() + TEXT("_");
+ 							if (Local.StartsWith(Prefix))
+ 								Local = Local.Mid(Prefix.Len());
+-							TmpReq.PerArticulationCtrl.FindOrAdd(Pair.Key).Add(
++							TmpReq.PerArticulationCtrl.FindOrAdd(FString(*Pair.Key)).Add(
+ 								{Local, (float)(*CtrlList)[i]->AsNumber()});
+ 						}
+ 					}
+@@ -1066,7 +1066,7 @@ TSharedPtr<FJsonObject> FURLabRpcDispatcher::HandleStep(const TSharedPtr<FJsonOb
+ 					ECameraInclude E = ECameraInclude::Latest;
+ 					if (Mode.Equals(TEXT("sync"), ESearchCase::IgnoreCase))
+ 						E = ECameraInclude::Sync;
+-					CameraSpec.Add(Kv.Key, E);
++					CameraSpec.Add(FString(*Kv.Key), E);
+ 				}
+ 			}
+ 		}
+@@ -1195,14 +1195,14 @@ TSharedPtr<FJsonObject> FURLabRpcDispatcher::HandleStep(const TSharedPtr<FJsonOb
+ 			FString CtlMode;
+ 			if ((*ArtObj)->TryGetStringField(TEXT("control_mode"), CtlMode))
+ 			{
+-				Cmd->Request.PerArticulationControlMode.Add(Pair.Key, CtlMode);
++				Cmd->Request.PerArticulationControlMode.Add(FString(*Pair.Key), CtlMode);
+ 			}
+ 
+ 			const TArray<TSharedPtr<FJsonValue>>* CtrlList = nullptr;
+ 			if ((*ArtObj)->TryGetArrayField(TEXT("ctrl"), CtrlList) && CtrlList)
+ 			{
+ 				// Positional ctrl array: indexed in articulation actuator order.
+-				if (AMjArticulation* Art = Cast<AMjArticulation>(Mgr->GetArticulation(Pair.Key)))
++				if (AMjArticulation* Art = Cast<AMjArticulation>(Mgr->GetArticulation(FString(*Pair.Key))))
+ 				{
+ 					TArray<UMjActuator*> Acts = Art->GetActuators();
+ 					for (int32 i = 0; i < CtrlList->Num() && i < Acts.Num(); ++i)
+@@ -1214,7 +1214,7 @@ TSharedPtr<FJsonObject> FURLabRpcDispatcher::HandleStep(const TSharedPtr<FJsonOb
+ 						FString Prefix = Art->GetName() + TEXT("_");
+ 						if (LocalName.StartsWith(Prefix))
+ 							LocalName = LocalName.Mid(Prefix.Len());
+-						Cmd->Request.PerArticulationCtrl.FindOrAdd(Pair.Key).Add(
++						Cmd->Request.PerArticulationCtrl.FindOrAdd(FString(*Pair.Key)).Add(
+ 							{LocalName, (float)(*CtrlList)[i]->AsNumber()});
+ 					}
+ 				}
+@@ -1226,7 +1226,7 @@ TSharedPtr<FJsonObject> FURLabRpcDispatcher::HandleStep(const TSharedPtr<FJsonOb
+ 			{
+ 				for (auto& KV : (*CtrlMap)->Values)
+ 				{
+-					Cmd->Request.PerArticulationCtrl.FindOrAdd(Pair.Key).Add(
++					Cmd->Request.PerArticulationCtrl.FindOrAdd(FString(*Pair.Key)).Add(
+ 						{KV.Key, (float)KV.Value->AsNumber()});
+ 				}
+ 			}
+@@ -1235,13 +1235,13 @@ TSharedPtr<FJsonObject> FURLabRpcDispatcher::HandleStep(const TSharedPtr<FJsonOb
+ 			const TSharedPtr<FJsonObject>* XfrcMap = nullptr;
+ 			if ((*ArtObj)->TryGetObjectField(TEXT("xfrc_applied"), XfrcMap) && XfrcMap && XfrcMap->IsValid())
+ 			{
+-				TMap<FString, TArray<double>>& BodyMap = Cmd->Request.PerArticulationXfrc.FindOrAdd(Pair.Key);
++				TMap<FString, TArray<double>>& BodyMap = Cmd->Request.PerArticulationXfrc.FindOrAdd(FString(*Pair.Key));
+ 				for (auto& KV : (*XfrcMap)->Values)
+ 				{
+ 					const TArray<TSharedPtr<FJsonValue>>* Arr = nullptr;
+ 					if (KV.Value->TryGetArray(Arr) && Arr && Arr->Num() == 6)
+ 					{
+-						TArray<double>& Six = BodyMap.FindOrAdd(KV.Key);
++						TArray<double>& Six = BodyMap.FindOrAdd(FString(*KV.Key));
+ 						Six.SetNum(6);
+ 						for (int i = 0; i < 6; ++i)
+ 							Six[i] = (*Arr)[i]->AsNumber();
+@@ -1827,7 +1827,7 @@ TSharedPtr<FJsonObject> FURLabRpcDispatcher::HandleReset(const TSharedPtr<FJsonO
+ 		{
+ 			for (auto& APair : (*PerArt)->Values)
+ 			{
+-				AMjArticulation* Art = Mgr->GetArticulation(APair.Key);
++				AMjArticulation* Art = Mgr->GetArticulation(FString(*APair.Key));
+ 				if (!Art)
+ 					continue;
+ 				const TSharedPtr<FJsonObject>* QObj = nullptr;
+-- 
+2.56.0.windows.4
+
+
+From 9a951c975fabb300f40907853e2cb30adab2b94a Mon Sep 17 00:00:00 2001
+From: PoSlap <punkouter26@gmail.com>
+Date: Wed, 21 Oct 2026 14:51:00 -0400
+Subject: [PATCH 03/10] UE 5.8: remaining FSharedString keys
+
+---
+ Source/URLab/Private/Bridge/RpcDispatcher.cpp | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/Source/URLab/Private/Bridge/RpcDispatcher.cpp b/Source/URLab/Private/Bridge/RpcDispatcher.cpp
+index 2f812b9..a9adf88 100644
+--- a/Source/URLab/Private/Bridge/RpcDispatcher.cpp
++++ b/Source/URLab/Private/Bridge/RpcDispatcher.cpp
+@@ -1227,7 +1227,7 @@ TSharedPtr<FJsonObject> FURLabRpcDispatcher::HandleStep(const TSharedPtr<FJsonOb
+ 				for (auto& KV : (*CtrlMap)->Values)
+ 				{
+ 					Cmd->Request.PerArticulationCtrl.FindOrAdd(FString(*Pair.Key)).Add(
+-						{KV.Key, (float)KV.Value->AsNumber()});
++						{FString(*KV.Key), (float)KV.Value->AsNumber()});
+ 				}
+ 			}
+ 
+@@ -1837,7 +1837,7 @@ TSharedPtr<FJsonObject> FURLabRpcDispatcher::HandleReset(const TSharedPtr<FJsonO
+ 				FString Prefix = Art->GetName() + TEXT("_");
+ 				for (auto& JPair : (*QObj)->Values)
+ 				{
+-					FString FullName = Prefix + JPair.Key;
++					FString FullName = Prefix + *JPair.Key;
+ 					int Jid = mj_name2id(m, mjOBJ_JOINT, TCHAR_TO_UTF8(*FullName));
+ 					if (Jid < 0)
+ 						Jid = mj_name2id(m, mjOBJ_JOINT, TCHAR_TO_UTF8(*JPair.Key));
+-- 
+2.56.0.windows.4
+
+
+From a027259a74e8ba8e62f5d77c9ec0799ff08821d8 Mon Sep 17 00:00:00 2001
+From: punkouter26 <punkouter26@gmail.com>
+Date: Sun, 25 Oct 2026 12:19:00 -0400
+Subject: [PATCH 04/10] feat(android): add Android arm64-v8a build support for
+ MuJoCo 3.10.0
+
+---
+ .gitignore                           |  2 +
+ Source/URLab/URLab.Build.cs          | 52 +++++++++++++++++++---
+ third_party/MuJoCo/build_android.ps1 | 64 ++++++++++++++++++++++++++++
+ 3 files changed, 113 insertions(+), 5 deletions(-)
+ create mode 100644 third_party/MuJoCo/build_android.ps1
+
+diff --git a/.gitignore b/.gitignore
+index 8dd8005..ff4ab55 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -144,3 +144,5 @@ build.log
+ # Local docs preview env + build output (Scripts/docs.ps1 / docs.sh)
+ .venv-docs/
+ /site/
++
++third_party/*/build_android/
+diff --git a/Source/URLab/URLab.Build.cs b/Source/URLab/URLab.Build.cs
+index 749d2d4..5d6d093 100644
+--- a/Source/URLab/URLab.Build.cs
++++ b/Source/URLab/URLab.Build.cs
+@@ -121,16 +121,26 @@ public class URLab : ModuleRules
+ 				"pthread", "dl", "rt"
+ 			});
+ 		}
++		else if (Target.Platform == UnrealTargetPlatform.Android)
++		{
++			PublicSystemLibraries.AddRange(new string[]
++			{
++				"log", "c", "m", "dl"
++			});
++		}
+ 
+ 		// Don't define _WIN32 on Linux: `#if defined _WIN32` is true even
+ 		// when _WIN32 is 0, which sends MuJoCo's mjexport.h down the
+ 		// __declspec(dllimport) branch and breaks clang on Linux.
+ 
+-		VerifyThirdPartyInstalls();
++		VerifyThirdPartyInstalls(Target);
+ 
+ 		AddMuj(Target);
+-		AddCoACD(Target);
+-		AddZeroMQ(Target);
++		if (Target.Platform != UnrealTargetPlatform.Android)
++		{
++			AddCoACD(Target);
++			AddZeroMQ(Target);
++		}
+ 	}
+ 
+ 	private string ThirdPartyPath
+@@ -226,6 +236,34 @@ public class URLab : ModuleRules
+ 				}
+ 			}
+ 		}
++		else if (Target.Platform == UnrealTargetPlatform.Android)
++		{
++			string Arch = "arm64-v8a";
++			string LibPath = Path.Combine(FullPath, "lib", "Android", Arch);
++			if (!Directory.Exists(LibPath))
++			{
++				LibPath = Path.Combine(FullPath, "lib", Arch);
++			}
++			if (!Directory.Exists(LibPath))
++			{
++				LibPath = Path.Combine(FullPath, "lib");
++			}
++			if (Directory.Exists(LibPath))
++			{
++				foreach (string LibFile in Directory.GetFiles(LibPath, "*.so", SearchOption.AllDirectories))
++				{
++					PublicAdditionalLibraries.Add(LibFile);
++				}
++				foreach (string LibFile in Directory.GetFiles(LibPath, "*.a", SearchOption.AllDirectories))
++				{
++					PublicAdditionalLibraries.Add(LibFile);
++				}
++				foreach (string LibFile in Directory.GetFiles(LibPath, "*.so*", SearchOption.AllDirectories))
++				{
++					RuntimeDependencies.Add(LibFile);
++				}
++			}
++		}
+ 	}
+ 
+ 	// Set to true to skip the submodule/install SHA drift checks. The default
+@@ -255,7 +293,7 @@ public class URLab : ModuleRules
+ 	// drift (Layer B). Runs once up front so any failure message is clearly
+ 	// attributable before UBT tries to resolve libs/includes. If URLab itself
+ 	// isn't a git checkout (release zip), the checks self-disable with a note.
+-	private void VerifyThirdPartyInstalls()
++	private void VerifyThirdPartyInstalls(ReadOnlyTargetRules Target)
+ 	{
+ 		if (SkipThirdPartyDriftChecks)
+ 		{
+@@ -274,7 +312,11 @@ public class URLab : ModuleRules
+ 
+ 		RegisterDriftCheckDependencies(PluginRoot);
+ 
+-		foreach (string Package in ThirdPartyPackages)
++		string[] PackagesToCheck = (Target.Platform == UnrealTargetPlatform.Android)
++			? new[] { "MuJoCo" }
++			: ThirdPartyPackages;
++
++		foreach (string Package in PackagesToCheck)
+ 		{
+ 			VerifyPackageInstall(PluginRoot, Package);
+ 		}
+diff --git a/third_party/MuJoCo/build_android.ps1 b/third_party/MuJoCo/build_android.ps1
+new file mode 100644
+index 0000000..8ce516f
+--- /dev/null
++++ b/third_party/MuJoCo/build_android.ps1
+@@ -0,0 +1,64 @@
++param(
++    [string]$InstallDir = "../install/MuJoCo",
++    [string]$BuildType = "Release",
++    [string]$AndroidApi = "28",
++    [string]$AndroidAbi = "arm64-v8a"
++)
++
++# Convert to absolute path
++if (-not [System.IO.Path]::IsPathRooted($InstallDir)) {
++    $InstallDir = Join-Path $PSScriptRoot $InstallDir
++}
++$InstallDir = [System.IO.Path]::GetFullPath($InstallDir)
++$InstallDir = $InstallDir.Replace('\', '/')
++
++# Locate NDK
++$ndk = $env:NDK_ROOT
++if (-not $ndk) { $ndk = $env:ANDROID_NDK_ROOT }
++if (-not $ndk -and $env:ANDROID_HOME) {
++    $ndkDirs = Get-ChildItem -Directory "$env:ANDROID_HOME/ndk" | Sort-Object Name -Descending
++    if ($ndkDirs) { $ndk = $ndkDirs[0].FullName }
++}
++if (-not $ndk) { throw "Android NDK not found. Set NDK_ROOT or ensure NDK is installed under ANDROID_HOME." }
++$ndk = [System.IO.Path]::GetFullPath($ndk).Replace('\', '/')
++$toolchain = "$ndk/build/cmake/android.toolchain.cmake"
++
++Write-Host "Configuring MuJoCo 3.10.0 for Android $AndroidAbi (API $AndroidApi) using NDK at $ndk..." -ForegroundColor Cyan
++
++$BuildDir = Join-Path $PSScriptRoot "build_android"
++New-Item -ItemType Directory -Force -Path $BuildDir | Out-Null
++Push-Location $BuildDir
++
++$RepoDir = Join-Path $PSScriptRoot "src"
++$RepoDir = $RepoDir.Replace('\', '/')
++
++cmake $RepoDir -G "Ninja" `
++  "-DCMAKE_TOOLCHAIN_FILE=$toolchain" `
++  "-DANDROID_ABI=$AndroidAbi" `
++  "-DANDROID_PLATFORM=android-$AndroidApi" `
++  "-DCMAKE_BUILD_TYPE=$BuildType" `
++  "-DCMAKE_C_FLAGS=-D_POSIX_C_SOURCE=200809L" `
++  "-DCMAKE_CXX_FLAGS=-D_POSIX_C_SOURCE=200809L" `
++  "-DMUJOCO_BUILD_EXAMPLES=OFF" `
++  "-DMUJOCO_BUILD_TESTS=OFF" `
++  "-DMUJOCO_BUILD_SIMULATE=OFF" `
++  "-DMUJOCO_TEST_PYTHON_UTIL=OFF" `
++  "-DBUILD_SHARED_LIBS=ON" `
++  "-DCMAKE_INSTALL_PREFIX=$InstallDir"
++
++if ($LASTEXITCODE -ne 0) { throw "CMake configuration failed for Android MuJoCo" }
++
++Write-Host "Building MuJoCo for Android $AndroidAbi..." -ForegroundColor Cyan
++ninja -j 4
++if ($LASTEXITCODE -ne 0) { throw "Build failed for Android MuJoCo" }
++
++Write-Host "Installing MuJoCo..." -ForegroundColor Cyan
++cmake --install .
++
++# Stage directly into lib/Android/arm64-v8a
++$stageDir = Join-Path $InstallDir "lib/Android/$AndroidAbi"
++New-Item -ItemType Directory -Force -Path $stageDir | Out-Null
++Copy-Item "lib/libmujoco.so" "$stageDir/libmujoco.so" -Force
++
++Pop-Location
++Write-Host "MuJoCo Android build complete: $stageDir/libmujoco.so" -ForegroundColor Green
+-- 
+2.56.0.windows.4
+
+
+From 575d3612084ebb0440b370da460ee686eaca5f1d Mon Sep 17 00:00:00 2001
+From: PoSlap <punkouter26@gmail.com>
+Date: Mon, 26 Oct 2026 04:09:43 -0400
+Subject: [PATCH 05/10] Android: stub libzmq/CoACD headers, package
+ libmujoco.so
+
+The dev bridge (ZMQ) and mesh decomposition (CoACD) have no Android build;
+stub headers make their calls fail cleanly. URLab_UPL.xml copies
+libmujoco.so into the APK next to libUnreal.so.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ Source/URLab/AndroidStubs/CoACD/coacd.h | 13 +++++++++++
+ Source/URLab/AndroidStubs/zmq.h         | 31 +++++++++++++++++++++++++
+ Source/URLab/URLab.Build.cs             |  6 +++++
+ Source/URLab/URLab_UPL.xml              |  7 ++++++
+ 4 files changed, 57 insertions(+)
+ create mode 100644 Source/URLab/AndroidStubs/CoACD/coacd.h
+ create mode 100644 Source/URLab/AndroidStubs/zmq.h
+ create mode 100644 Source/URLab/URLab_UPL.xml
+
+diff --git a/Source/URLab/AndroidStubs/CoACD/coacd.h b/Source/URLab/AndroidStubs/CoACD/coacd.h
+new file mode 100644
+index 0000000..ad467d7
+--- /dev/null
++++ b/Source/URLab/AndroidStubs/CoACD/coacd.h
+@@ -0,0 +1,13 @@
++// Android stand-in for CoACD (PoSlap): mesh decomposition is an editor step; at game time it returns no hulls.
++#pragma once
++#include <stdint.h>
++
++struct CoACD_Mesh { double* vertices_ptr; uint64_t vertices_count; int* triangles_ptr; uint64_t triangles_count; };
++struct CoACD_MeshArray { CoACD_Mesh* meshes_ptr; uint64_t meshes_count; };
++
++constexpr int preprocess_auto = 0;
++constexpr int apx_ch = 0;
++
++inline void CoACD_freeMeshArray(CoACD_MeshArray) {}
++inline CoACD_MeshArray CoACD_run(CoACD_Mesh const&, double, int, int, int, int, int, int, int, bool, bool, bool, int,
++	bool, double, int, unsigned int, bool) { return { nullptr, 0 }; }
+diff --git a/Source/URLab/AndroidStubs/zmq.h b/Source/URLab/AndroidStubs/zmq.h
+new file mode 100644
+index 0000000..d65632c
+--- /dev/null
++++ b/Source/URLab/AndroidStubs/zmq.h
+@@ -0,0 +1,31 @@
++// Android stand-in for libzmq (PoSlap): the dev bridge and camera streaming are desktop-only. Every call fails the way a
++// real one does when nothing can bind or connect (null handles, -1), so URLab's existing error paths take over.
++#pragma once
++#include <stddef.h>
++
++#define ZMQ_PUB 1
++#define ZMQ_SUB 2
++#define ZMQ_REP 4
++#define ZMQ_SUBSCRIBE 6
++#define ZMQ_RCVMORE 13
++#define ZMQ_SNDHWM 23
++#define ZMQ_RCVTIMEO 27
++#define ZMQ_SNDTIMEO 28
++#define ZMQ_DONTWAIT 1
++#define ZMQ_SNDMORE 2
++
++typedef struct zmq_msg_t { unsigned char _[64]; } zmq_msg_t;
++
++static inline void* zmq_ctx_new(void) { return nullptr; }
++static inline int zmq_ctx_term(void*) { return 0; }
++static inline void* zmq_socket(void*, int) { return nullptr; }
++static inline int zmq_close(void*) { return 0; }
++static inline int zmq_setsockopt(void*, int, const void*, size_t) { return -1; }
++static inline int zmq_getsockopt(void*, int, void*, size_t*) { return -1; }
++static inline int zmq_bind(void*, const char*) { return -1; }
++static inline int zmq_send(void*, const void*, size_t, int) { return -1; }
++static inline int zmq_msg_init(zmq_msg_t*) { return 0; }
++static inline int zmq_msg_recv(zmq_msg_t*, void*, int) { return -1; }
++static inline int zmq_msg_close(zmq_msg_t*) { return 0; }
++static inline void* zmq_msg_data(zmq_msg_t* M) { return M->_; }
++static inline size_t zmq_msg_size(zmq_msg_t*) { return 0; }
+diff --git a/Source/URLab/URLab.Build.cs b/Source/URLab/URLab.Build.cs
+index 5d6d093..ec33e54 100644
+--- a/Source/URLab/URLab.Build.cs
++++ b/Source/URLab/URLab.Build.cs
+@@ -141,6 +141,12 @@ public class URLab : ModuleRules
+ 			AddCoACD(Target);
+ 			AddZeroMQ(Target);
+ 		}
++		else
++		{
++			// no libzmq / CoACD on Android: headers whose calls fail cleanly (no bridge, no mesh decomposition in the game)
++			PublicIncludePaths.Add(Path.Combine(ModuleDirectory, "AndroidStubs"));
++			AdditionalPropertiesForReceipt.Add("AndroidPlugin", Path.Combine(ModuleDirectory, "URLab_UPL.xml"));	// libmujoco.so into the APK
++		}
+ 	}
+ 
+ 	private string ThirdPartyPath
+diff --git a/Source/URLab/URLab_UPL.xml b/Source/URLab/URLab_UPL.xml
+new file mode 100644
+index 0000000..a152b3f
+--- /dev/null
++++ b/Source/URLab/URLab_UPL.xml
+@@ -0,0 +1,7 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!-- PoSlap: libUnreal.so links libmujoco.so dynamically; put it beside it in the APK's native libs -->
++<root xmlns:android="http://schemas.android.com/apk/res/android">
++	<resourceCopies>
++		<copyFile src="$S(PluginDir)/../../third_party/install/MuJoCo/lib/Android/arm64-v8a/libmujoco.so" dst="$S(BuildDir)/libs/arm64-v8a/libmujoco.so" />
++	</resourceCopies>
++</root>
+-- 
+2.56.0.windows.4
+
+
+From 87c9810fb00cb37adea5c8d1868f293eaacb1b42 Mon Sep 17 00:00:00 2001
+From: PoSlap <punkouter26@gmail.com>
+Date: Mon, 26 Oct 2026 10:14:25 -0400
+Subject: [PATCH 06/10] Android: 16 KB page-aligned libmujoco.so (Android 15+)
+
+---
+ third_party/MuJoCo/build_android.ps1 | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/third_party/MuJoCo/build_android.ps1 b/third_party/MuJoCo/build_android.ps1
+index 8ce516f..380c80b 100644
+--- a/third_party/MuJoCo/build_android.ps1
++++ b/third_party/MuJoCo/build_android.ps1
+@@ -36,6 +36,7 @@ cmake $RepoDir -G "Ninja" `
+   "-DCMAKE_TOOLCHAIN_FILE=$toolchain" `
+   "-DANDROID_ABI=$AndroidAbi" `
+   "-DANDROID_PLATFORM=android-$AndroidApi" `
++  "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON" `
+   "-DCMAKE_BUILD_TYPE=$BuildType" `
+   "-DCMAKE_C_FLAGS=-D_POSIX_C_SOURCE=200809L" `
+   "-DCMAKE_CXX_FLAGS=-D_POSIX_C_SOURCE=200809L" `
+@@ -62,3 +63,4 @@ Copy-Item "lib/libmujoco.so" "$stageDir/libmujoco.so" -Force
+ 
+ Pop-Location
+ Write-Host "MuJoCo Android build complete: $stageDir/libmujoco.so" -ForegroundColor Green
++
+-- 
+2.56.0.windows.4
+
+
+From 9fabc38e65ce73ff3b34ce9f52902d182f546e1b Mon Sep 17 00:00:00 2001
+From: punko <punko@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 16:59:41 -0400
+Subject: [PATCH 07/10] Twist controller: don't cache input assets in
+ GC-invisible statics
+
+AMjArticulation::PostInitializeComponents kept IMC_TwistControl, IA_TwistMove and IA_TwistTurn in
+function-local static raw pointers. GC cannot see those, so after the first world was torn down (level
+travel) the assets could be collected and every later articulation got dangling pointers, which then
+reached the twist controller and Enhanced Input. The next GC walked them and asserted
+IsValidIndex(Index) in a slow AddReferencedObjects call (FSlowARO) - at the latest at exit.
+Repro (PoSlap): open an arena level, travel to another arena level, quit: 7/10 crashed; 0/16 after.
+LoadObject returns the already-loaded asset, so loading per articulation costs nothing.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ Source/URLab/Private/MuJoCo/Core/MjArticulation.cpp | 10 +++++++---
+ 1 file changed, 7 insertions(+), 3 deletions(-)
+
+diff --git a/Source/URLab/Private/MuJoCo/Core/MjArticulation.cpp b/Source/URLab/Private/MuJoCo/Core/MjArticulation.cpp
+index 3b9dc2a..bb93761 100644
+--- a/Source/URLab/Private/MuJoCo/Core/MjArticulation.cpp
++++ b/Source/URLab/Private/MuJoCo/Core/MjArticulation.cpp
+@@ -86,11 +86,15 @@ void AMjArticulation::PostInitializeComponents()
+ 	{
+ 		UMjTwistController* TwistCtrl = NewObject<UMjTwistController>(this, TEXT("TwistController"));
+ 
+-		static UInputMappingContext* DefaultIMC = LoadObject<UInputMappingContext>(
++		// Not cached in function-local statics: those raw pointers are invisible to GC, so once the first world was
++		// torn down the assets could be collected and every later world handed dangling pointers to the twist
++		// controller and Enhanced Input (a garbage InternalIndex at the next GC: IsValidIndex assert on level
++		// travel + exit). LoadObject returns the already-loaded asset, so loading per articulation is cheap.
++		UInputMappingContext* DefaultIMC = LoadObject<UInputMappingContext>(
+ 			nullptr, TEXT("/UnrealRoboticsLab/Input/IMC_TwistControl.IMC_TwistControl"));
+-		static UInputAction* DefaultMove = LoadObject<UInputAction>(
++		UInputAction* DefaultMove = LoadObject<UInputAction>(
+ 			nullptr, TEXT("/UnrealRoboticsLab/Input/IA_TwistMove.IA_TwistMove"));
+-		static UInputAction* DefaultTurn = LoadObject<UInputAction>(
++		UInputAction* DefaultTurn = LoadObject<UInputAction>(
+ 			nullptr, TEXT("/UnrealRoboticsLab/Input/IA_TwistTurn.IA_TwistTurn"));
+ 
+ 		if (DefaultIMC)
+-- 
+2.56.0.windows.4
+
+
+From 55493dd32996ec34c14202c04c83b16e67010be9 Mon Sep 17 00:00:00 2001
+From: punko <punko@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 18:48:06 -0400
+Subject: [PATCH 08/10] Build joints and bodies in Blueprint authoring order
+
+GetAttachChildren() order is rebuilt at load and differs in cooked builds
+(siblings come back name-sorted), which reorders the joints inside a body
+and so changes the physics. Sort children by their SCS node order before
+building the spec.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ .../MuJoCo/Components/Bodies/MjBody.cpp       |  1 +
+ .../MuJoCo/Components/Bodies/MjFrame.cpp      |  1 +
+ .../Private/MuJoCo/Core/MjArticulation.cpp    |  1 +
+ Source/URLab/Private/MuJoCo/Utils/MjUtils.cpp | 31 +++++++++++++++++++
+ Source/URLab/Public/MuJoCo/Utils/MjUtils.h    |  9 ++++++
+ 5 files changed, 43 insertions(+)
+
+diff --git a/Source/URLab/Private/MuJoCo/Components/Bodies/MjBody.cpp b/Source/URLab/Private/MuJoCo/Components/Bodies/MjBody.cpp
+index bcf9218..27450df 100644
+--- a/Source/URLab/Private/MuJoCo/Components/Bodies/MjBody.cpp
++++ b/Source/URLab/Private/MuJoCo/Components/Bodies/MjBody.cpp
+@@ -203,6 +203,7 @@ void UMjBody::Setup(USceneComponent* Parent, mjsBody* ParentBody, FMujocoSpecWra
+ 	m_Root = Parent;
+ 
+ 	TArray<USceneComponent*> DirectChildren = GetAttachChildren();
++	MjUtils::SortByAuthoringOrder(DirectChildren);	// joint order inside a body is physics
+ 
+ 	for (USceneComponent* CurrentComponent : DirectChildren)
+ 	{
+diff --git a/Source/URLab/Private/MuJoCo/Components/Bodies/MjFrame.cpp b/Source/URLab/Private/MuJoCo/Components/Bodies/MjFrame.cpp
+index 53fa316..d60a78d 100644
+--- a/Source/URLab/Private/MuJoCo/Components/Bodies/MjFrame.cpp
++++ b/Source/URLab/Private/MuJoCo/Components/Bodies/MjFrame.cpp
+@@ -98,6 +98,7 @@ void UMjFrame::Setup(USceneComponent* Parent, mjsBody* ParentBody, FMujocoSpecWr
+ 	}
+ 
+ 	TArray<USceneComponent*> DirectChildren = GetAttachChildren();
++	MjUtils::SortByAuthoringOrder(DirectChildren);
+ 
+ 	for (USceneComponent* CurrentComponent : DirectChildren)
+ 	{
+diff --git a/Source/URLab/Private/MuJoCo/Core/MjArticulation.cpp b/Source/URLab/Private/MuJoCo/Core/MjArticulation.cpp
+index bb93761..67d0a3b 100644
+--- a/Source/URLab/Private/MuJoCo/Core/MjArticulation.cpp
++++ b/Source/URLab/Private/MuJoCo/Core/MjArticulation.cpp
+@@ -376,6 +376,7 @@ void AMjArticulation::Setup(mjSpec* Spec, mjVFS* VFS)
+ 
+ 	TArray<UMjBody*> RootBodies;
+ 	TArray<USceneComponent*> WorldChildren = WorldBody->GetAttachChildren();
++	MjUtils::SortByAuthoringOrder(WorldChildren);
+ 	for (USceneComponent* Child : WorldChildren)
+ 	{
+ 		if (UMjBody* BodyChild = Cast<UMjBody>(Child))
+diff --git a/Source/URLab/Private/MuJoCo/Utils/MjUtils.cpp b/Source/URLab/Private/MuJoCo/Utils/MjUtils.cpp
+index 4d9f712..9c9ed12 100644
+--- a/Source/URLab/Private/MuJoCo/Utils/MjUtils.cpp
++++ b/Source/URLab/Private/MuJoCo/Utils/MjUtils.cpp
+@@ -25,6 +25,9 @@
+ #include "MuJoCo/Utils/MjXmlUtils.h"
+ #include "DrawDebugHelpers.h"
+ #include "XmlNode.h"
++#include "Engine/BlueprintGeneratedClass.h"
++#include "Engine/SimpleConstructionScript.h"
++#include "Engine/SCS_Node.h"
+ 
+ FVector MjUtils::MjToUEPosition(const double* pos)
+ {
+@@ -436,6 +439,34 @@ FString MjUtils::PrettifyName(const FString& Name, const FString& PrefixToStrip)
+ 	return Result.IsEmpty() ? Name : Result;
+ }
+ 
++void MjUtils::SortByAuthoringOrder(TArray<USceneComponent*>& Components)
++{
++	Components.RemoveAll([](const USceneComponent* C) { return C == nullptr; });
++	if (Components.Num() < 2 || !Components[0]->GetOwner())
++		return;
++
++	// SCS nodes in the order the importer created them (subclass first, then its parents)
++	TMap<FName, int32> Order;
++	for (UClass* C = Components[0]->GetOwner()->GetClass(); C; C = C->GetSuperClass())
++	{
++		const UBlueprintGeneratedClass* BPGC = Cast<UBlueprintGeneratedClass>(C);
++		if (!BPGC || !BPGC->SimpleConstructionScript)
++			continue;
++		for (const USCS_Node* Node : BPGC->SimpleConstructionScript->GetAllNodes())
++		{
++			if (Node && !Order.Contains(Node->GetVariableName()))
++				Order.Add(Node->GetVariableName(), Order.Num());
++		}
++	}
++
++	Components.StableSort([&Order](const USceneComponent& A, const USceneComponent& B)
++	{
++		const int32* IA = Order.Find(A.GetFName());
++		const int32* IB = Order.Find(B.GetFName());
++		return (IA ? *IA : MAX_int32) < (IB ? *IB : MAX_int32);
++	});
++}
++
+ bool MjUtils::ReadVec3InMeters(const FXmlNode* Node, const TCHAR* Attr, FVector& Out, bool& bOverride)
+ {
+ 	if (!Node)
+diff --git a/Source/URLab/Public/MuJoCo/Utils/MjUtils.h b/Source/URLab/Public/MuJoCo/Utils/MjUtils.h
+index 97be0f3..18aba53 100644
+--- a/Source/URLab/Public/MuJoCo/Utils/MjUtils.h
++++ b/Source/URLab/Public/MuJoCo/Utils/MjUtils.h
+@@ -175,6 +175,15 @@ public:
+ 	 * @return FString The cleaned, human-readable name.
+ 	 */
+ 	static FString PrettifyName(const FString& Name, const FString& PrefixToStrip = TEXT(""));
++
++	/**
++	 * @brief Sorts components into their Blueprint authoring order (the SCS node order).
++	 *
++	 * GetAttachChildren() order is rebuilt at load and differs in cooked builds (siblings come
++	 * back name-sorted), which reorders the joints inside a body and so changes the physics.
++	 * Components not found in any SCS keep their relative order, after the ones that are.
++	 */
++	static void SortByAuthoringOrder(TArray<class USceneComponent*>& Components);
+ };
+ 
+ // ---------------------------------------------------------------------------
+-- 
+2.56.0.windows.4
+
+
+From 0e50c5873cdb21f78ba8e796037ca461a92a33d6 Mon Sep 17 00:00:00 2001
+From: punkouter27 <punkouter27@gmail.com>
+Date: Tue, 10 Nov 2026 10:06:42 -0500
+Subject: [PATCH 09/10] Pin MuJoCo to 4.0.0 (match PoRace trainer)
+
+---
+ third_party/MuJoCo/src | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/third_party/MuJoCo/src b/third_party/MuJoCo/src
+index 28009f9..ac60eae 160000
+--- a/third_party/MuJoCo/src
++++ b/third_party/MuJoCo/src
+@@ -1 +1 @@
+-Subproject commit 28009f9105cd92784b7b0b30c0605a5e29107a77
++Subproject commit ac60eae30fa7e0d31315c38d9476752fb81be67e
+-- 
+2.56.0.windows.4
+
+
+From 8a268fe46cc4f5473245f40a3a0d1359271f4172 Mon Sep 17 00:00:00 2001
+From: punkouter27 <punkouter27@gmail.com>
+Date: Tue, 10 Nov 2026 10:51:28 -0500
+Subject: [PATCH 10/10] MuJoCo 4.0: limit flags are mjtLimited, active and
+ actgravcomp are bools
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ .../Private/MuJoCo/Components/Actuators/MjActuator.cpp      | 6 +++---
+ .../Private/MuJoCo/Components/Constraints/MjEquality.cpp    | 2 +-
+ Source/URLab/Private/MuJoCo/Components/Joints/MjJoint.cpp   | 6 +++---
+ Source/URLab/Private/MuJoCo/Components/Tendons/MjTendon.cpp | 4 ++--
+ 4 files changed, 9 insertions(+), 9 deletions(-)
+
+diff --git a/Source/URLab/Private/MuJoCo/Components/Actuators/MjActuator.cpp b/Source/URLab/Private/MuJoCo/Components/Actuators/MjActuator.cpp
+index cbbe72a..8c516cf 100644
+--- a/Source/URLab/Private/MuJoCo/Components/Actuators/MjActuator.cpp
++++ b/Source/URLab/Private/MuJoCo/Components/Actuators/MjActuator.cpp
+@@ -163,11 +163,11 @@ void UMjActuator::ExportTo(mjsActuator* Element, mjsDefault* Default)
+ 	if (bOverride_delay)
+ 		Element->delay = delay;
+ 	if (bOverride_ctrllimited)
+-		Element->ctrllimited = ctrllimited ? 1 : 0;
++		Element->ctrllimited = ctrllimited ? mjLIMITED_TRUE : mjLIMITED_FALSE;
+ 	if (bOverride_forcelimited)
+-		Element->forcelimited = forcelimited ? 1 : 0;
++		Element->forcelimited = forcelimited ? mjLIMITED_TRUE : mjLIMITED_FALSE;
+ 	if (bOverride_actlimited)
+-		Element->actlimited = actlimited ? 1 : 0;
++		Element->actlimited = actlimited ? mjLIMITED_TRUE : mjLIMITED_FALSE;
+ 	if (bOverride_ctrlrange)
+ 	{
+ 		for (int32 i = 0; i < FMath::Min(ctrlrange.Num(), 2); ++i)
+diff --git a/Source/URLab/Private/MuJoCo/Components/Constraints/MjEquality.cpp b/Source/URLab/Private/MuJoCo/Components/Constraints/MjEquality.cpp
+index 082efb5..16893dc 100644
+--- a/Source/URLab/Private/MuJoCo/Components/Constraints/MjEquality.cpp
++++ b/Source/URLab/Private/MuJoCo/Components/Constraints/MjEquality.cpp
+@@ -153,7 +153,7 @@ void UMjEquality::ExportTo(mjsEquality* Element)
+ 
+ 	// --- CODEGEN_EXPORT_START ---
+ 	if (bOverride_active)
+-		Element->active = active;
++		Element->active = active != 0;
+ 	if (bOverride_solref)
+ 	{
+ 		for (int32 i = 0; i < FMath::Min(solref.Num(), 2); ++i)
+diff --git a/Source/URLab/Private/MuJoCo/Components/Joints/MjJoint.cpp b/Source/URLab/Private/MuJoCo/Components/Joints/MjJoint.cpp
+index 1068492..a813822 100644
+--- a/Source/URLab/Private/MuJoCo/Components/Joints/MjJoint.cpp
++++ b/Source/URLab/Private/MuJoCo/Components/Joints/MjJoint.cpp
+@@ -210,9 +210,9 @@ void UMjJoint::ExportTo(mjsJoint* Element, mjsDefault* Default)
+ 			Element->springdamper[i] = springdamper[i];
+ 	}
+ 	if (bOverride_limited)
+-		Element->limited = limited ? 1 : 0;
++		Element->limited = limited ? mjLIMITED_TRUE : mjLIMITED_FALSE;
+ 	if (bOverride_ActFrcLimited)
+-		Element->actfrclimited = ActFrcLimited ? 1 : 0;
++		Element->actfrclimited = ActFrcLimited ? mjLIMITED_TRUE : mjLIMITED_FALSE;
+ 	if (bOverride_solreflimit)
+ 	{
+ 		for (int32 i = 0; i < FMath::Min(solreflimit.Num(), 2); ++i)
+@@ -244,7 +244,7 @@ void UMjJoint::ExportTo(mjsJoint* Element, mjsDefault* Default)
+ 			Element->actfrcrange[i] = ActFrcRange[i];
+ 	}
+ 	if (bOverride_actuatorgravcomp)
+-		Element->actgravcomp = actuatorgravcomp;
++		Element->actgravcomp = actuatorgravcomp != 0;
+ 	if (bOverride_margin)
+ 		Element->margin = margin;
+ 	if (bOverride_armature)
+diff --git a/Source/URLab/Private/MuJoCo/Components/Tendons/MjTendon.cpp b/Source/URLab/Private/MuJoCo/Components/Tendons/MjTendon.cpp
+index 4e89d8d..e636615 100644
+--- a/Source/URLab/Private/MuJoCo/Components/Tendons/MjTendon.cpp
++++ b/Source/URLab/Private/MuJoCo/Components/Tendons/MjTendon.cpp
+@@ -132,9 +132,9 @@ void UMjTendon::ExportTo(mjsTendon* Element, mjsDefault* def)
+ 	if (bOverride_group)
+ 		Element->group = group;
+ 	if (bOverride_limited)
+-		Element->limited = limited ? 1 : 0;
++		Element->limited = limited ? mjLIMITED_TRUE : mjLIMITED_FALSE;
+ 	if (bOverride_ActFrcLimited)
+-		Element->actfrclimited = ActFrcLimited ? 1 : 0;
++		Element->actfrclimited = ActFrcLimited ? mjLIMITED_TRUE : mjLIMITED_FALSE;
+ 	if (bOverride_range)
+ 	{
+ 		for (int32 i = 0; i < FMath::Min(range.Num(), 2); ++i)
+-- 
+2.56.0.windows.4
+

@@ -1,0 +1,46 @@
+{
+ "mujoco": "4.0.0",
+ "pass": true,
+ "rows": [
+  {
+   "name": "hold vs Unreal model",
+   "status": "OK",
+   "note": "worst body gap 0.00e+00 mm, worst |dqpos| 0.00e+00, identical to 1e-6 for 2.00 s of 2 s"
+  },
+  {
+   "name": "hold vs source XML",
+   "status": "OK",
+   "note": "worst body gap 0.00e+00 mm, worst |dqpos| 0.00e+00, identical to 1e-6 for 2.00 s of 2 s"
+  },
+  {
+   "name": "replay vs Unreal model",
+   "status": "OK",
+   "note": "worst body gap 0.00e+00 mm, worst |dqpos| 0.00e+00, identical to 1e-6 for 5.00 s of 5 s"
+  },
+  {
+   "name": "replay vs source XML",
+   "status": "OK",
+   "note": "worst body gap 0.00e+00 mm, worst |dqpos| 0.00e+00, identical to 1e-6 for 5.00 s of 5 s"
+  },
+  {
+   "name": "policy vs Unreal model",
+   "status": "OK",
+   "note": "base 0.000 cm apart after 5 s (Unreal x 2.029 m, Python 2.029 m), worst body gap 0.00 mm, upright Unreal 1.000 / Python 1.000"
+  },
+  {
+   "name": "policy vs source XML",
+   "status": "OK",
+   "note": "base 0.000 cm apart after 5 s (Unreal x 2.029 m, Python 2.029 m), worst body gap 0.00 mm, upright Unreal 1.000 / Python 1.000"
+  },
+  {
+   "name": "policy: Unreal's brain vs onnxruntime",
+   "status": "OK",
+   "note": "worst action difference 0.00e+00 over 250 decisions"
+  },
+  {
+   "name": "model readback (Unreal model vs training model)",
+   "status": "OK",
+   "note": "140 physics arrays compared, 0 differ"
+  }
+ ]
+}

@@ -1,0 +1,19 @@
+{
+	"FileVersion": 3,
+	"EngineAssociation": "5.8",
+	"Category": "",
+	"Description": "PoRace: RL-trained creatures racing under MuJoCo physics",
+	"Modules": [
+		{
+			"Name": "PoRaceUnreal",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	],
+	"Plugins": [
+		{ "Name": "PythonScriptPlugin", "Enabled": true },
+		{ "Name": "UnrealRoboticsLab", "Enabled": true },
+		{ "Name": "NNERuntimeORT", "Enabled": true },
+		{ "Name": "NNERuntimeBasicCpu", "Enabled": true }
+	]
+}
