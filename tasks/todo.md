@@ -18,8 +18,8 @@ Plan approved 2026-11-10.
 
 ## Slice 1 — Physics parity for Blue
 - [ ] 1.1 Create `PoRaceUnreal.uproject` (UE 5.8, C++ module, plugins as PoSlapUnreal)
-- [ ] 1.0 Trainer to MuJoCo 3.17.0; re-run Blue's ladder rungs in Python; retrain any brain that fails
-- [ ] 1.2 `Scripts/setup_urlab.ps1`: clone URLab, apply `urlab_porace.patch`, MuJoCo 3.17.0, build third party
+- [ ] 1.0 Trainer to MuJoCo 4.0.0; re-run Blue's ladder rungs in Python; retrain any brain that fails
+- [ ] 1.2 `Scripts/setup_urlab.ps1`: clone URLab, apply `urlab_porace.patch`, MuJoCo 4.0.0, build third party
 - [ ] 1.3 `training/contract.py` + generator for `RaceContract.gen.h`
 - [ ] 1.4 Import Go2 into a testbed level by script; marker check
 - [ ] 1.5 Model readback against the source model

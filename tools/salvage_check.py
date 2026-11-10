@@ -1,6 +1,6 @@
 """Slice 0.9: prove the salvage from the Unity project is complete and usable.
 
-    uv run --no-project --python 3.12 --with mujoco==3.15.0 --with onnxruntime --with numpy \
+    uv run --no-project --python 3.12 --with mujoco==4.0.0 --with onnxruntime --with numpy \
         python tools/salvage_check.py [--source <PoRace checkout or export>]
 
 Checks, each printed as one OK / FAIL row:

@@ -11,7 +11,7 @@ Each slice ends with something that runs and a check that passes. A slice does n
 **Goal:** everything needed from the Unity project is inside PoRaceUnreal, so `PoRace/` can be deleted.
 
 - **Acceptance:** every row of SPEC §6 is copied; track and creature definitions are converted to JSON; the new repo has its first commit.
-- **Test assertions:** file counts and hashes match the sources for copied files; every `.onnx` loads in onnxruntime and reports the expected input and output sizes (48→12, 42→12, 103→29); every MJCF compiles in MuJoCo 3.15.0 and 3.17.0; `check_model.py` passes for Go2, Matt and Grandma from the new location.
+- **Test assertions:** file counts and hashes match the sources for copied files; every `.onnx` loads in onnxruntime and reports the expected input and output sizes (48→12, 42→12, 103→29); every MJCF compiles in MuJoCo 3.15.0 and 4.0.0; `check_model.py` passes for Go2, Matt and Grandma from the new location.
 - **Verification:** `python tools/salvage_check.py` prints a table of source → destination with OK per row.
 - **Blast radius:** none in PoRace (read only). Stop point: **the owner deletes `PoRace/` only after this slice is reported green.**
 - **Note:** no Unity baseline run (owner's call). Regression uses the Python reference race and the Unity times already logged in `docs/unity_tasks.md`.
@@ -20,10 +20,10 @@ Each slice ends with something that runs and a check that passes. A slice does n
 
 **Goal:** Blue stands and walks in Unreal exactly as in MuJoCo.
 
-- **Acceptance:** trainer and URLab move to the newest MuJoCo (3.17.0); Blue's brains pass their ladder rungs in Python on it (retrain any that fail); Unreal project builds; the Go2 model imports; the zero-brain hold, replay and closed-loop gates pass with `go2_loco.onnx`.
+- **Acceptance:** trainer and URLab move to MuJoCo 4.0.0; Blue's brains pass their ladder rungs in Python on it (retrain any that fail); Unreal project builds; the Go2 model imports; the zero-brain hold, replay and closed-loop gates pass with `go2_loco.onnx`.
 - **Test assertions:** marker check lands at (0,0,0), (100,0,0), (0,−100,0) cm; model readback has no field differences beyond float residue; zero-brain max difference < 1e-6; replay every body ≤ 1 mm and action difference < 1e-4; closed loop base ≤ 1 cm after 5 s; no Chaos bodies.
 - **Verification:** `Scripts/verify_all.ps1 -Only parity`.
-- **Blast radius:** the URLab patch and MuJoCo pin. If URLab will not build against 3.17.0, stop and report before any further slice. A retrain of Blue costs GPU hours and is reported with an estimate before it starts.
+- **Blast radius:** the URLab patch and MuJoCo pin. If URLab will not build against 4.0.0, stop and report before any further slice. A retrain of Blue costs GPU hours and is reported with an estimate before it starts.
 
 ## Slice 2 — One race, one racer
 

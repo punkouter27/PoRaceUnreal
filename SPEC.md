@@ -11,7 +11,7 @@ One rule above all: **MuJoCo moves the racers; Unreal only draws them.** Chaos n
 |---|---|---|
 | Engine | Unreal Engine 5.8, C++ module `PoRaceUnreal` | Installed at `C:\Program Files\Epic Games\UE_5.8`; PoSlapUnreal uses it |
 | Physics | MuJoCo through the URLab plugin (`Plugins/UnrealRoboticsLab`, cloned and patched, not tracked) | PoSlapUnreal pattern; patch kept as `Plugins/urlab_porace.patch` |
-| MuJoCo version | **Newest release** in the trainer, URLab, Android and web: 3.17.0 on 2026-11-10 (there is no MuJoCo 4 on PyPI yet; move to it when it ships) | Owner's call 2026-11-10. Brains were trained on 3.15.0: each is re-gated on the new version and retrained only if it fails. All salvaged models compile on 3.17.0 |
+| MuJoCo version | **4.0.0** in the trainer, URLab, Android and web (`mujoco`, `mujoco-warp` 4.0.0; needs Python 3.11+) | Owner's call 2026-11-10. Brains were trained on 3.15.0: each is re-gated on 4.0.0 and retrained only if it fails. All salvaged models compile on 4.0.0 |
 | Brains | ONNX. Windows: NNE ONNX Runtime. Android: NNE Basic CPU with weights exported to `.bin` | PoSlapUnreal: UE 5.8 has no ONNX runtime on Android |
 | Trainer | PoRace's Docker trainer moved as is (`mujoco_playground` on MuJoCo Warp, Brax PPO) | Graduated brains and gates depend on it |
 | Reference runtime | Python CPU MuJoCo race (`training/race.py`), new, ported from `MultiRaceOrchestrator` | Makes the rules testable without Unreal and gives the browser a second implementation to check against |
@@ -24,7 +24,7 @@ One rule above all: **MuJoCo moves the racers; Unreal only draws them.** Chaos n
 
 **Open risks**
 
-1. **Newest MuJoCo inside URLab.** PoSlap's URLab is pinned to 3.10.0, so the pin moves to 3.17.0. Brains trained on 3.15.0 may behave differently on 3.17.0; Slice 1 re-runs each brain's ladder in Python on 3.17.0 first, and a brain that fails is retrained (owner approved retraining).
+1. **MuJoCo 4.0.0.** A major version step on three fronts. (a) PoSlap's URLab is pinned to 3.10.0 and must build against 4.0.0; API changes may need plugin patches. (b) The trainer moves from `playground` 0.2.0 to the release that pairs with MuJoCo 4 (1.0.1), which may change the env and PPO APIs. (c) Brains trained on 3.15.0 may behave differently; Slice 1 re-runs each brain's ladder in Python on 4.0.0 first, and a brain that fails is retrained (owner approved retraining).
 2. **URLab rebuilds the model.** PoSlapUnreal found that URLab's rebuilt model differs from the source XML by float residues. The parity check therefore steps URLab's compiled `.mjb`, not the XML.
 3. **Mixed step settings.** Blue uses `impratio 100, iterations 1`; Matt's model sets its own options. One MuJoCo model has one option block. The Unity version already ran them together, so the combined option values are copied from it and recorded in `training/contract.py`.
 4. **Roster selection.** URLab imports a model at edit time, so racers cannot be added at run time. Each track level contains every ready racer; unpicked racers are parked off track with contacts off and their brain idle, as the Unity version did.
