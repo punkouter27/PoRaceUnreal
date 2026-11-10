@@ -30,6 +30,7 @@ struct FRaceTrack
 	double Wrap(double S) const;
 	double U(double S) const;
 	FVector2D PointAt(double S, FVector2D& OutTangent) const;
+	int32 SegmentAt(double S) const;	// the segment holding arc length S (PointAt's search)
 	double LaneScale(double S) const;
 	FVector2D LanePoint(double S, double Lane, FVector2D& OutTangent) const;
 	double BankAt(double S) const;

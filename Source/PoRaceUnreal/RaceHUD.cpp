@@ -157,14 +157,16 @@ void ARaceHUD::DrawHUD()
 	// top left: track and lap, then the standings and the race clock
 	int32 Lap = 1;
 	for (const FRaceHudRow& R : Race.Rows) if (R.FinishTime < 0.0) { Lap = FMath::Min(R.Lap + 1, Race.Laps); break; }
-	Text(Race.Laps > 1 ? FString::Printf(TEXT("%s  ·  Lap %d/%d"), *Race.Track, Lap, Race.Laps) : Race.Track, Pad, Pad, FLinearColor::White, 20.f * S, false, false, TEXT("TL"));
+	const FString Title = (Race.Laps > 1 ? FString::Printf(TEXT("%s  ·  Lap %d/%d"), *Race.Track, Lap, Race.Laps) : Race.Track) + (Race.bHandicap ? TEXT("  ·  handicap") : TEXT(""));
+	Text(Title, Pad, Pad, FLinearColor::White, 20.f * S, false, false, TEXT("TL"));
 	float Y = Pad + 38.f * S;
 	for (int32 i = 0; i < Race.Rows.Num(); ++i)
 	{
 		const FRaceHudRow& R = Race.Rows[i];
 		const FString Status = R.FinishTime >= 0.0 ? FString::Printf(TEXT("%.2f s"), R.FinishTime)
 			: Race.Phase == ERacePhase::Finished ? FString::Printf(TEXT("DNF  %.0f m"), R.Distance)
-			: FString::Printf(TEXT("%.0f m%s"), R.Distance, R.bGettingUp ? TEXT("  DOWN") : R.State == ERacerState::Stumble ? TEXT("  stumble") : TEXT(""));
+			: FString::Printf(TEXT("%.0f m%s"), R.Distance, R.bGettingUp ? TEXT("  DOWN") : R.State == ERacerState::Stumble ? TEXT("  stumble")
+				: R.Intent.IsEmpty() ? TEXT("") : *(TEXT("  ") + R.Intent));
 		Text(FString::Printf(TEXT("%d. %s"), i + 1, *R.Name), Pad, Y, R.Color, 16.f * S, false, false, TEXT("TL"));
 		Text(Status, Pad + 120.f * S, Y, FLinearColor(0.92f, 0.92f, 0.92f), 16.f * S, false, false, TEXT("TL"));
 		Y += 26.f * S;
@@ -178,6 +180,8 @@ void ARaceHUD::DrawHUD()
 	{
 		if (GoUntil < 0.0) GoUntil = Now + 1.0;
 		if (Now < GoUntil) Text(TEXT("GO!"), 0.5f * W, 0.26f * H, FLinearColor(1.f, 0.85f, 0.2f), 90.f * S, true, false, TEXT("C"));
+		// the yellow flag: two or more racers down, everyone else at 80 % pace for up to 5 s
+		else if (Race.bYellow) Text(TEXT("YELLOW FLAG  ·  80 % pace"), 0.5f * W, 0.2f * H, FLinearColor(1.f, 0.82f, 0.1f), 30.f * S, true, false, TEXT("C"));
 	}
 
 	// the results card (Slate) shows once the race is over; the unattended loop moves on from it

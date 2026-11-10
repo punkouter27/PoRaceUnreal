@@ -1,7 +1,10 @@
 """The reference race: one race on CPU MuJoCo with the real brains, printing the same result line Unreal prints.
 
     uv run --no-project --python 3.12 --with mujoco==4.0.0 --with onnxruntime --with numpy python race.py planar_sprint --seed 1
-      [--racers blue,matt] [--laps 2] [--flip-at 20] [--mjb Saved/PoRace/model_bound_<track>.mjb] [--log race.jsonl]
+      [--racers blue,matt] [--laps 2] [--flip-at 20 [--flip-count 2]] [--no-tactics] [--handicap] [--yellow-flag]
+      [--audit | --contact-gate] [--mjb Saved/PoRace/model_bound_<track>.mjb] [--log race.jsonl]
+
+Exit: 0 all finished, 1 not (unless --limit was given), 4 --contact-gate failed.
 
 --mjb steps the model Unreal ran (saved by the controller) instead of the track XML: then Unreal and Python step the
 same numbers, and the finish times should match exactly.
@@ -46,9 +49,15 @@ def main():
   ap.add_argument("--seed", type=int, default=1)
   ap.add_argument("--laps", type=int, default=0)
   ap.add_argument("--flip-at", type=float, default=-1.0)
+  ap.add_argument("--flip-count", type=int, default=1, help="racers knocked over at --flip-at: the leader, then the next")
+  ap.add_argument("--no-tactics", action="store_true", help="fixed lanes (Unity -noTactics)")
+  ap.add_argument("--handicap", action="store_true", help="head starts that equalise expected finish times")
+  ap.add_argument("--yellow-flag", action="store_true", help="the yellow flag (on in interactive races, off in tests)")
+  ap.add_argument("--audit", action="store_true", help="log the contact audit")
+  ap.add_argument("--contact-gate", action="store_true", help="the contact audit, and fail (exit 4) past its limits")
   ap.add_argument("--intro", type=float, default=0.0, help="seconds of racer intro before the countdown")
   ap.add_argument("--finish-window", type=float, default=0.0, help="call the race this long after the winner (0: off)")
-  ap.add_argument("--limit", type=float, default=600.0, help="call the race this long after the start")
+  ap.add_argument("--limit", type=float, default=None, help="call the race this long after the start (default 600 s)")
   ap.add_argument("--racers", help="comma-separated racer names on the grid (default: every racer of the track model)")
   ap.add_argument("--mjb", type=Path)
   ap.add_argument("--log", type=Path, help="JSONL: every racer's distance and state at 10 Hz")
@@ -68,9 +77,12 @@ def main():
     if want is not None and r["name"].lower() not in want:
       parked.append(racer)
       continue
-    entries.append(Entry(r["name"], racer, r["cruise"], r["maxYawRate"], r["usesUnstick"], card.get("holdsHeadingAtRest", False), card.get("impratio", 100.0)))
-  race = Race(Track.load(a.track), entries, a.seed, laps=a.laps, flip_at=a.flip_at, parked=parked,
-              intro_steps=round(a.intro / 0.004), finish_window_steps=round(a.finish_window / 0.004), limit_steps=round(a.limit / 0.004))
+    entries.append(Entry(r["name"], racer, r["cruise"], r["maxYawRate"], r["usesUnstick"], card.get("holdsHeadingAtRest", False), card.get("impratio", 100.0),
+                         tuple(r["prefix"] + f for f in card.get("footGeoms", [])), card.get("pace", 1.0)))
+  race = Race(Track.load(a.track), entries, a.seed, laps=a.laps, flip_at=a.flip_at, flip_count=a.flip_count, parked=parked,
+              tactics=not a.no_tactics, handicap=a.handicap, yellow_flag=a.yellow_flag, audit=a.audit or a.contact_gate,
+              intro_steps=round(a.intro / 0.004), finish_window_steps=round(a.finish_window / 0.004),
+              limit_steps=round((a.limit if a.limit is not None else 600.0) / 0.004))
   mujoco.mj_forward(m, d)
   log = a.log.open("w") if a.log else None
   t0 = time.perf_counter()
@@ -80,10 +92,22 @@ def main():
     mujoco.mj_step(m, d)
     if log and race.step % 25 == 0:
       log.write(json.dumps({"step": race.step, "phase": race.phase, "t": round(race.race_time(), 3),
-                            "racers": [[e.name, round(e.distance, 3), e.state, e.racer.mode] for e in entries]}) + "\n")
+                            "yellow": race.yellow.out,
+                            "racers": [[e.name, round(e.distance, 3), e.state, e.racer.mode, round(e.lateral, 3), e.intent] for e in entries]}) + "\n")
   print(f"[Race] {race.result_line()}")
+  for ev in race.events:
+    if ev[1] in ("pass", "yellow", "green"):
+      print(f"[Event] {(ev[0] - race.race_start) * 0.004:.2f}s {' '.join(ev[1:])}")
+  fails = []
+  if race.auditor:
+    print(f"[ContactAudit] {race.auditor.line()}")
+    fails = race.auditor.failures() if a.contact_gate else []
+    for f in fails:
+      print(f"[ContactGate] FAIL {f}")
   print(f"[Perf] {race.step} physics steps in {time.perf_counter() - t0:.1f} s on the CPU")
-  return 0 if race.phase == "Finished" else 1
+  if fails:
+    return 4
+  return 0 if race.finished == len(entries) or a.limit is not None else 1
 
 
 if __name__ == "__main__":

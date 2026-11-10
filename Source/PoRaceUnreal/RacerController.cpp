@@ -118,6 +118,17 @@ bool URacerController::BindRace(mjModel* m, mjData* d)
 	const double Limit = bExplicitLimit ? FCString::Atod(*S) : 600.0;
 	Rules.FinishWindowSteps = FMath::RoundToInt64(Window / FRaceRules::Dt);
 	Rules.LimitSteps = FMath::RoundToInt64(Limit / FRaceRules::Dt);
+	// Slice 5: tactics on unless -NoTactics; the yellow flag on in interactive races, in a test only with -YellowFlag
+	// (Unity kept regression races without it); the handicap from the menu (?Handicap=1) or -Handicap; the contact audit
+	// always (it only reads), failing the test (exit 4) with -ContactGate
+	Rules.bTactics = !FParse::Param(Cmd, TEXT("NoTactics"));
+	Rules.Yellow.bEnabled = bTest ? FParse::Param(Cmd, TEXT("YellowFlag")) : true;
+	Rules.bHandicap = FParse::Param(Cmd, TEXT("Handicap")) || (Opt(TEXT("Handicap"), S) && S != TEXT("0"));
+	Rules.FlipCount = Opt(TEXT("RaceFlipCount"), S) ? FMath::Max(1, FCString::Atoi(*S)) : 1;
+	Rules.bAudit = true;
+	bContactGate = FParse::Param(Cmd, TEXT("ContactGate"));
+	if (FParse::Param(Cmd, TEXT("RaceSelfTest")))
+		for (const FString& L : FRaceRules::SelfTest()) UE_LOG(LogRace, Display, TEXT("[SelfTest] %s"), *L);
 
 	const TSharedPtr<FJsonObject> Fp = Race::LoadJson(TrackFingerprint);
 	if (!Fp) return false;
@@ -185,6 +196,10 @@ bool URacerController::BindRace(mjModel* m, mjData* d)
 		E.bUsesUnstick = R.GetBoolField(TEXT("usesUnstick"));
 		Card->TryGetBoolField(TEXT("holdsHeadingAtRest"), E.bHoldsHeading);
 		Card->TryGetNumberField(TEXT("impratio"), E.ImpRatio);
+		Card->TryGetNumberField(TEXT("pace"), E.Pace);
+		const TArray<TSharedPtr<FJsonValue>>* Feet;
+		if (Card->TryGetArrayField(TEXT("footGeoms"), Feet))
+			for (const TSharedPtr<FJsonValue>& F : *Feet) E.Feet.Add(Prefix + F->AsString());
 		E.Racer = Racer.Get();
 		UE_LOG(LogRace, Log, TEXT("racer %s (%s, %s): brains %s%s%s, cruise %.2f m/s, impratio %g"), *E.Name, *Prefix, *Card->GetStringField(TEXT("kind")),
 			*LocoName, GetupName.IsEmpty() ? TEXT("") : TEXT(" + "), *GetupName, E.Cruise, E.ImpRatio);
@@ -214,6 +229,8 @@ void URacerController::PublishHud(const mjData* d)
 	Hud.IntroLeft = Rules.IntroLeft();
 	Hud.IntroSeconds = (double)Rules.IntroSteps * FRaceRules::Dt;
 	Hud.bCalled = Rules.bCalled;
+	Hud.bYellow = Rules.Yellow.bOut;
+	Hud.bHandicap = Rules.bHandicap;
 	Hud.TrackId = Rules.Track.Id;
 	Hud.RaceTime = Rules.RaceTime();
 	Hud.Steps = StepCount.load(std::memory_order_relaxed);
@@ -234,6 +251,8 @@ void URacerController::PublishHud(const mjData* d)
 		Row.Place = E.Place;
 		Row.State = E.State;
 		Row.bGettingUp = E.Racer->Recovering();
+		Row.Intent = E.Intent;
+		Row.HeadStart = E.HeadStart;
 		Row.BaseBody = E.Racer->BaseBody();
 		Row.PosUE = MjUtils::MjToUEPosition(d->qpos + E.Racer->RootQpos());
 		if (E.FinishTime < 0.0) { Mean += E.Distance; ++Running; }
@@ -248,14 +267,19 @@ void URacerController::Finish()
 	bReported = true;
 	const FString Line = Rules.ResultLine();
 	UE_LOG(LogRace, Display, TEXT("[Race] %s"), *Line);
+	for (const FString& Ev : Rules.Events) UE_LOG(LogRace, Display, TEXT("[Event] %s"), *Ev);
+	UE_LOG(LogRace, Display, TEXT("[ContactAudit] %s"), *Rules.Audit.Line());
+	const TArray<FString> Gate = bContactGate ? Rules.Audit.Failures() : TArray<FString>();
+	for (const FString& F : Gate) UE_LOG(LogRace, Error, TEXT("[ContactGate] FAIL %s"), *F);
 	{
 		FScopeLock L(&HudLock);
 		Hud.Result = Line;
 	}
 	if (!bTest) return;
-	// 1: not everyone finished (unless the test asked for a short race with -RaceLimit); 3: a check failed
+	// 1: not everyone finished (unless the test asked for a short race with -RaceLimit); 3: a check failed;
+	// 4: -ContactGate and a contact class stayed past its limit (Unity's exit 4)
 	const bool bAllHome = Rules.Finished == Rules.Entries.Num();
-	const int32 Code = CheckFailures.load() > 0 ? 3 : (!bAllHome && !bExplicitLimit) ? 1 : 0;
+	const int32 Code = CheckFailures.load() > 0 ? 3 : Gate.Num() ? 4 : (!bAllHome && !bExplicitLimit) ? 1 : 0;
 	UE_LOG(LogRace, Display, TEXT("[RaceTest] exit %d (%d check failures)"), Code, CheckFailures.load());
 	AsyncTask(ENamedThreads::GameThread, [Code] { FPlatformMisc::RequestExitWithStatus(false, (uint8)Code); });
 }

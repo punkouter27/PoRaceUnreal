@@ -42,5 +42,14 @@
  "_brains_note": "Locomotion brain per track terrain, as the Unity TrackBuilder assigned them (banked and steeple both run the graduated steeple brain s7; go2_loco_bank r7 is the fallback). Files: training/models/brains/<name>.onnx.",
  "kind": "go2",
  "holdsHeadingAtRest": false,
- "impratio": 100.0
+ "impratio": 100.0,
+ "footGeoms": [
+  "FL",
+  "FR",
+  "RL",
+  "RR"
+ ],
+ "_footGeoms_note": "Foot geoms (without the racer prefix): the contact audit holds feet on the floor to a tighter limit than other contacts.",
+ "pace": 1.0,
+ "_pace_note": "Share of the commanded cruise speed this racer actually holds over a race (Planar Sprint reference races, Slice 5). The handicap's head starts use cruise x pace, so racers are expected home together."
 }

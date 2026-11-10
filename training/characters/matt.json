@@ -52,5 +52,12 @@
  "fallenUpZ": 0.3,
  "limpAfterDecisions": 15,
  "_race_note": "Unity MattController: no get-up brain; down (pelvis < fallenPelvisZ or torso up z < fallenUpZ) for more than limpAfterDecisions decisions -> limp (targets follow the joints) until the 5 s reset. Holds the track heading during the countdown (drifts on a zero command). No un-stick (slow ramp). matt_loco.onnx = training/final/matt_m20.onnx (same bytes).",
- "verified": "2026-11-10: m20 on MuJoCo 4.0.0 (training/human_check.py: training recording reproduced to 0.0 cm, rungs 10/10) and in Unreal (Planar Sprint seeds 1-5, Flat Oval 2 laps seeds 1-3, flip test: identical to the Python reference race). docs/20261110/slice3.md"
+ "verified": "2026-11-10: m20 on MuJoCo 4.0.0 (training/human_check.py: training recording reproduced to 0.0 cm, rungs 10/10) and in Unreal (Planar Sprint seeds 1-5, Flat Oval 2 laps seeds 1-3, flip test: identical to the Python reference race). docs/20261110/slice3.md",
+ "footGeoms": [
+  "left_foot",
+  "right_foot"
+ ],
+ "_footGeoms_note": "Foot geoms (without the racer prefix): the contact audit holds feet on the floor to a tighter limit than other contacts.",
+ "pace": 0.92,
+ "_pace_note": "Share of the commanded cruise speed this racer actually holds over a race (Planar Sprint reference races, Slice 5). The handicap's head starts use cruise x pace, so racers are expected home together."
 }

@@ -106,6 +106,7 @@ void ARaceHUD::Start()
 		if (const FRaceRacerInfo* R = RaceRegistry::FindRacer(Roster, P); R && RaceRegistry::CanRace(*R, *Track())) GI->Racers.Add(P);
 	GI->Racers.Sort();
 	GI->Laps = Track()->bClosed ? Laps : 0;
+	GI->bHandicap = bHandicap;
 	GI->StartRace(this);
 }
 
@@ -118,6 +119,7 @@ void ARaceHUD::BuildMenu()
 	if (GI && GI->Racers.Num()) for (const FString& R : GI->Racers) Picked.Add(R);
 	else if (Track()) for (const FRaceRacerInfo& R : Roster) if (RaceRegistry::CanRace(R, *Track())) Picked.Add(R.Name.ToLower());
 	Laps = GI && GI->Laps > 0 ? GI->Laps : Track() ? Track()->DefaultLaps : 1;
+	bHandicap = GI && GI->bHandicap;
 	SelectTrack(SelTrack);
 
 	TWeakObjectPtr<ARaceHUD> Self(this);
@@ -167,7 +169,11 @@ void ARaceHUD::BuildMenu()
 		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(14.f, 0.f)
 			[SNew(STextBlock).Font(FCoreStyle::GetDefaultFontStyle("Bold", 20)).ColorAndOpacity(FSlateColor(Ink))
 				.Text_Lambda([Self, Closed] { return T(!Self.IsValid() ? TEXT("") : Closed() ? FString::FromInt(Self->Laps) : TEXT("1 (a sprint)")); })]
-		+ SHorizontalBox::Slot().AutoWidth()[Button(Label(T(TEXT("+")), 18, FSlateColor(Ink)), [Self] { if (Self.IsValid()) Self->Laps = FMath::Min(5, Self->Laps + 1); }, nullptr, Closed)];
+		+ SHorizontalBox::Slot().AutoWidth()[Button(Label(T(TEXT("+")), 18, FSlateColor(Ink)), [Self] { if (Self.IsValid()) Self->Laps = FMath::Min(5, Self->Laps + 1); }, nullptr, Closed)]
+		// the handicap: slower racers start ahead so everyone is expected home together
+		+ SHorizontalBox::Slot().FillWidth(1.f)
+		+ SHorizontalBox::Slot().AutoWidth()[Button(Label(T(TEXT("HANDICAP")), 14, FSlateColor(Ink)), [Self] { if (Self.IsValid()) Self->bHandicap = !Self->bHandicap; },
+			[Self] { return Self.IsValid() && Self->bHandicap; })];
 
 	TSharedRef<SWidget> Panel_ = SNew(SBorder).BorderImage(&Panel()).Padding(FMargin(28.f, 22.f))
 		[SNew(SVerticalBox)

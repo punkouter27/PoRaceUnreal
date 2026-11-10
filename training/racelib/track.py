@@ -91,6 +91,18 @@ class Track:
     t = (dx / ln, dy / ln)
     return (a[0] + t[0] * (s - self.cum[i]), a[1] + t[1] * (s - self.cum[i])), t
 
+  def segment_at(self, s):
+    """The segment holding arc length s (point_at's search; closed tracks wrap)."""
+    if self.closed:
+      s = self.wrap(s)
+    i = 0
+    if s >= self.length:
+      i = self.n - 1
+    elif s > 0:
+      while i < self.n - 1 and self.cum[i + 1] <= s:
+        i += 1
+    return i
+
   def lane_scale(self, s):
     return curve(self.lane_keys, self.u(s), 1.0)
 

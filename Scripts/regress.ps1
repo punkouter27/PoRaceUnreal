@@ -1,11 +1,13 @@
 # Race regression: Unreal races for a set of seeds, each checked against the Python reference race.
 #
 #   powershell -ExecutionPolicy Bypass -File Scripts\regress.ps1 [-Track planar_sprint] [-Seeds "1,2,3,4,5"] [-Racers blue,matt]
-#       [-Laps 2] [-FlipAt 20] [-Parallel 3]
+#       [-Laps 2] [-FlipAt 20 [-FlipCount 2]] [-NoTactics] [-Handicap] [-YellowFlag] [-ContactGate] [-Parallel 3]
 #
 # Per seed:
 #   Unreal      UnrealEditor-Cmd -game -nullrhi -RaceTest (the level's checks gate it: exit 3 on a failed check)
-#   exact       Python on the model Unreal ran (Saved/PoRace/model_bound_<track>.mjb): the result line must be identical
+#   exact       Python on the model Unreal ran (Saved/PoRace/model_bound_<track>.mjb): the result line, the events (passes,
+#               yellow flags) and the contact audit must be identical
+#   self test   the tactics and yellow-flag rules without physics (-RaceSelfTest vs training/selftest.py): identical lines
 #   reference   Python on the track file (training/assets/tracks/<track>.xml): finish times within 1 %
 #               (URLab simplifies the drawn meshes, which reorders contacts at rounding level; docs/20261110/slice2.md)
 # Writes Saved/PoRace/regress_<track>.json and prints a table. Exit 1 if any seed fails.
@@ -15,6 +17,11 @@ param(
     [string]$Track = "planar_sprint",
     [string]$Seeds = "1,2,3,4,5",   # text: "powershell -File" passes 1,2,3 as one argument
     [double]$FlipAt = -1,
+    [int]$FlipCount = 1,
+    [switch]$NoTactics,
+    [switch]$Handicap,
+    [switch]$YellowFlag,
+    [switch]$ContactGate,
     [string]$Racers = "",           # "blue,matt": who is on the grid (default every racer of the track model)
     [int]$Laps = 0,                 # 0: the track's default
     [int]$Parallel = 3,
@@ -37,10 +44,19 @@ $Extra = @()   # the same race for Python
 if ($FlipAt -ge 0) { $Extra += @("--flip-at", "$FlipAt") }
 if ($Racers) { $Extra += @("--racers", $Racers) }
 if ($Laps -gt 0) { $Extra += @("--laps", "$Laps") }
+if ($FlipAt -ge 0) { $Tag += "_flip" }
+if ($FlipCount -gt 1) { $Extra += @("--flip-count", "$FlipCount") }
+if ($NoTactics) { $Extra += "--no-tactics"; $Tag += "_notactics" }
+if ($Handicap) { $Extra += "--handicap"; $Tag += "_handicap" }
+if ($YellowFlag) { $Extra += "--yellow-flag" }
+if ($ContactGate) { $Extra += "--contact-gate" }
 
 function RaceLine([string]$Text) {
-    $m = [regex]::Match($Text, "\[Race\] ((FINISHED|DNF) map=.*)")
+    $m = [regex]::Match($Text, "\[Race\] ((FINISHED|CALLED|DNF) map=.*)")
     if ($m.Success) { return $m.Groups[1].Value.Trim() } else { return $null }
+}
+function Tagged([string]$Text, [string]$Name) {   # every "[Name] ..." line, joined
+    return (@([regex]::Matches($Text, "\[$Name\] ([^\r\n]*)") | ForEach-Object { $_.Groups[1].Value.Trim() }) -join "`n")
 }
 function Times([string]$Line) {
     if (-not $Line) { return @() }
@@ -57,6 +73,12 @@ foreach ($s in $SeedList) {
     if ($FlipAt -ge 0) { $ueArgs += "-RaceFlipAt=$FlipAt" }
     if ($Racers) { $ueArgs += "-Racers=$Racers" }
     if ($Laps -gt 0) { $ueArgs += "-Laps=$Laps" }
+    if ($FlipCount -gt 1) { $ueArgs += "-RaceFlipCount=$FlipCount" }
+    if ($NoTactics) { $ueArgs += "-NoTactics" }
+    if ($Handicap) { $ueArgs += "-Handicap" }
+    if ($YellowFlag) { $ueArgs += "-YellowFlag" }
+    if ($ContactGate) { $ueArgs += "-ContactGate" }
+    if ($s -eq $SeedList[0]) { $ueArgs += "-RaceSelfTest" }
     $p = Start-Process -FilePath $Editor -ArgumentList $ueArgs -RedirectStandardOutput $log -RedirectStandardError "$log.err" -NoNewWindow -PassThru
     $null = $p.Handle   # read the handle now, or ExitCode comes back empty once the process has exited
     $jobs += [pscustomobject]@{ Seed = $s; Process = $p; Log = $log }
@@ -85,17 +107,27 @@ try {
         $ue = RaceLine $text
         $code = $j.Process.ExitCode
         $checks = @([regex]::Matches($text, "\[Check\] ([^\r\n]*)") | ForEach-Object { $_.Groups[1].Value })
-        $exact = RaceLine ((& uv @Py race.py $Track --seed $s --mjb $Mjb @Extra 2>&1) -join "`n")
+        $exactText = (& uv @Py race.py $Track --seed $s --mjb $Mjb --audit @Extra 2>&1) -join "`n"
+        $exact = RaceLine $exactText
+        $sameExtras = ((Tagged $text "Event") -eq (Tagged $exactText "Event")) -and ((Tagged $text "ContactAudit") -eq (Tagged $exactText "ContactAudit"))
+        if (-not $sameExtras) { Write-Host "  seed ${s}: events / contact audit differ`n    Unreal: $(Tagged $text 'Event') $(Tagged $text 'ContactAudit')`n    Python: $(Tagged $exactText 'Event') $(Tagged $exactText 'ContactAudit')" }
         $ref = RaceLine ((& uv @Py race.py $Track --seed $s @Extra 2>&1) -join "`n")
         $tu = Times $ue; $tr = Times $ref
         $worst = 0.0
         foreach ($a in $tu) { $b = $tr | Where-Object Name -eq $a.Name; if ($b) { $worst = [Math]::Max($worst, [Math]::Abs($a.T - $b.T) / $b.T) } else { $worst = 1.0 } }
         if ($tu.Count -eq 0) { $worst = 1.0 }
-        $ok = ($code -eq 0) -and $ue -and ($ue -eq $exact) -and ($worst -le $Tolerance) -and -not ($checks | Where-Object { $_ -match "FAIL" })
+        $ok = ($code -eq 0) -and $ue -and ($ue -eq $exact) -and $sameExtras -and ($worst -le $Tolerance) -and -not ($checks | Where-Object { $_ -match "FAIL" })
         if (-not $ok) { $failed++ }
         $rows += [pscustomobject]@{ seed = $s; ok = $ok; exit = $code; unreal = $ue; python_exact = $exact; python_reference = $ref;
-                                    exact_match = ($ue -eq $exact); worst_time_diff = [Math]::Round($worst, 5); checks = $checks }
+                                    exact_match = ($ue -eq $exact); events_audit_match = $sameExtras; events = (Tagged $text "Event");
+                                    contact_audit = (Tagged $text "ContactAudit"); contact_gate = (Tagged $text "ContactGate"); worst_time_diff = [Math]::Round($worst, 5); checks = $checks }
     }
+    # the self test: the first seed's Unreal run printed it
+    $ueSelf = Tagged (Get-Content $jobs[0].Log -Raw) "SelfTest"
+    $pySelf = ((Tagged ((& uv @Py selftest.py 2>&1) -join "`n") "SelfTest") -split "`n" | Where-Object { $_ -notmatch "^all passed|FAILED" }) -join "`n"
+    $selfOk = $ueSelf -and ($ueSelf -eq $pySelf)
+    Write-Host ("self test (tactics, yellow flag): {0} lines, Unreal and Python {1}" -f @($ueSelf -split "`n").Count, $(if ($selfOk) { "identical" } else { "DIFFERENT" })) -ForegroundColor $(if ($selfOk) { "Green" } else { "Red" })
+    if (-not $selfOk) { $failed++; Write-Host "  Unreal:`n$ueSelf`n  Python:`n$pySelf" }
 } finally { Pop-Location }
 
 # 3. report
@@ -109,7 +141,7 @@ foreach ($r in $rows) {
         (@($r.checks | Where-Object { $_ -match "OK$" }).Count.ToString() + " OK, " + @($r.checks | Where-Object { $_ -match "FAIL" }).Count + " FAIL")) -ForegroundColor $col
     if (-not $r.exact_match) { Write-Host "    Unreal: $($r.unreal)`n    Python: $($r.python_exact)" }
 }
-[IO.File]::WriteAllText((Join-Path $Root "Saved\PoRace\regress_$Track.json"), ($rows | ConvertTo-Json -Depth 4))
+[IO.File]::WriteAllText((Join-Path $Root "Saved\PoRace\regress_$Track$Tag.json"), ($rows | ConvertTo-Json -Depth 4))
 Write-Host ""
 if ($failed) { Write-Host "$failed of $($rows.Count) seeds FAILED" -ForegroundColor Red; exit 1 }
 Write-Host "all $($rows.Count) seeds passed" -ForegroundColor Green

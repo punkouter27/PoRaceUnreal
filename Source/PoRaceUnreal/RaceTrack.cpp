@@ -79,6 +79,15 @@ FVector2D FRaceTrack::PointAt(double S, FVector2D& OutTangent) const
 	return FVector2D(A.X + OutTangent.X * (S - Cum[i]), A.Y + OutTangent.Y * (S - Cum[i]));
 }
 
+int32 FRaceTrack::SegmentAt(double S) const
+{
+	if (bClosed) S = Wrap(S);
+	int32 i = 0;
+	if (S >= Length) i = N - 1;
+	else if (S > 0.0) { while (i < N - 1 && Cum[i + 1] <= S) ++i; }
+	return i;
+}
+
 double FRaceTrack::Curve(const TArray<FRaceCurveKey>& K, double T, double Default)
 {
 	if (K.Num() == 0) return Default;

@@ -25,6 +25,8 @@ struct FRaceHudRow
 	int32 Lap = 0, Place = 0, BaseBody = -1;
 	ERacerState State = ERacerState::Racing;
 	bool bGettingUp = false;
+	FString Intent;							// tactics: "PASS L" / "PASS R" / "AVOID" / "BLOCK" / ""
+	double HeadStart = 0.0;					// the handicap's head start (m)
 	FVector PosUE = FVector::ZeroVector;	// base body, Unreal cm
 };
 
@@ -39,6 +41,8 @@ struct FRaceHud
 	double CountdownLeft = 0.0, RaceTime = 0.0;
 	double IntroLeft = 0.0, IntroSeconds = 0.0;	// the racer intro before the countdown
 	bool bCalled = false;						// the race was called (finish window / limit): the rest are DNF
+	bool bYellow = false;						// the yellow flag is out: everyone at 80 % pace
+	bool bHandicap = false;						// head starts this race
 	FString TrackId;
 	int64 Steps = 0;
 	FVector TangentUE = FVector::ForwardVector;	// track direction at the pack's mean distance
@@ -54,7 +58,8 @@ struct FRaceHud
  *    training/parity_check.py.
  *
  * Command line:
- *   race     -RaceTest  -Seed=<n>  -Laps=<n>  -RaceFlipAt=<s>
+ *   race     -RaceTest  -Seed=<n>  -Laps=<n>  -Racers=<a,b>  -RaceFlipAt=<s> [-RaceFlipCount=<n>]  -RaceLimit=<s>
+ *            -NoTactics  -Handicap  -YellowFlag  -ContactGate  -RaceSelfTest
  *   testbed  -RaceMode=Replay|Policy  -RaceReplay=<json>  -RaceDump=<json>  -RaceBrain=<onnx>  -RaceCommand=vx,vy,wz
  *            -RaceRecord=<seconds>  -RaceQuit
  */
@@ -117,6 +122,7 @@ private:
 	std::atomic<bool> bGameReady = false;
 	double IntroSeconds = -1.0;
 	bool bExplicitLimit = false;
+	bool bContactGate = false;
 	double WaitLogAt = 0.0;
 	TArray<TUniquePtr<FRacer>> Racers;	// every racer of the model, on the grid or parked
 	TArray<FString> ParkedPrefixes;

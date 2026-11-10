@@ -61,6 +61,7 @@ private:
 	int32 SelTrack = 0;
 	TSet<FString> Picked;					// racer names, lower case
 	int32 Laps = 0;
+	bool bHandicap = false;					// head starts that equalise expected finish times
 	TSharedPtr<SRaceProbe> MenuPanel, MenuStamp;
 	TSharedPtr<SWidget> StartButton;
 	void BuildMenu();

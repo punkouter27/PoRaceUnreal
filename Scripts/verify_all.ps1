@@ -38,11 +38,13 @@ try {
     Step "contract" "Generated contract files are up to date" { & uv @Py contract.py --check }
     Step "brains" "Go2 brains pass their rungs on this MuJoCo" { & uv @Py version_check.py }
     Step "brains" "Matt's brain reproduces his training run and passes his rungs" { & uv @Py human_check.py --creature matt }
-    Step "race" "Reference races: Planar Sprint (Blue + Matt, a flip, Matt flipped alone), Flat Oval 2 laps" {
+    Step "race" "Rules self test: tactics (pass, avoid, block, hold a pass) and the yellow flag" { & uv @Py selftest.py }
+    Step "race" "Reference races: Planar Sprint (Blue + Matt, a flip, Matt flipped alone), Flat Oval 2 laps, with the handicap and the contact gate" {
         & uv @Py race.py planar_sprint --seed 1
         if ($LASTEXITCODE -eq 0) { & uv @Py race.py planar_sprint --seed 1 --flip-at 20 }
         if ($LASTEXITCODE -eq 0) { & uv @Py race.py planar_sprint --seed 1 --racers matt --flip-at 20 }
         if ($LASTEXITCODE -eq 0) { & uv @Py race.py flat_oval --seed 1 --laps 2 }
+        if ($LASTEXITCODE -eq 0) { & uv @Py race.py flat_oval --seed 3 --laps 2 --handicap --contact-gate }
     }
     if ($Unreal -or $Only -eq "parity") {
         Step "parity" "Editor build" {
@@ -61,8 +63,11 @@ try {
             }
             $global:LASTEXITCODE = $fails
         }
-        Step "parity" "Unreal races match the reference race (Planar Sprint seeds 1-5)" {
-            & powershell -ExecutionPolicy Bypass -File (Join-Path $Root "Scripts/regress.ps1") -Track planar_sprint -Seeds 1,2,3,4,5
+        Step "parity" "Unreal races match the reference race (Planar Sprint seeds 1-5, contact gate; result, events, contact audit, self test)" {
+            & powershell -ExecutionPolicy Bypass -File (Join-Path $Root "Scripts/regress.ps1") -Track planar_sprint -Seeds "1,2,3,4,5" -ContactGate
+        }
+        Step "parity" "Unreal handicap races match the reference race (Flat Oval 2 laps, seeds 1-5)" {
+            & powershell -ExecutionPolicy Bypass -File (Join-Path $Root "Scripts/regress.ps1") -Track flat_oval -Laps 2 -Seeds "1,2,3,4,5" -Handicap -ContactGate
         }
     }
 } finally { Pop-Location }

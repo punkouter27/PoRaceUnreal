@@ -57,11 +57,11 @@ Plan approved 2026-11-10.
 - [ ] 4.6 Memory over many races: +315 MB in 10 short races, unclear if a leak: decide in the Slice 10 soak
 
 ## Slice 5 — Race rules complete
-- [ ] 5.1 Tactics (pass, block, lateral cap) in reference and Unreal
-- [ ] 5.2 Yellow flag
-- [ ] 5.3 Finish window and DNF classification
-- [ ] 5.4 Handicap, unstick
-- [ ] 5.5 `UContactAudit`, `-ContactGate`
+- [x] 5.1 Tactics (pass, avoid, block, lateral step 0.25 m/s, banks no-manoeuvre) in reference and Unreal; overtakes counted with 0.25 m hysteresis; a pass holds until 1 m clear (new: Unity's cut back across the slower racer); "slower" at the pace a racer holds
+- [x] 5.2 Yellow flag (2+ down on a 3+ grid, 80 % pace, ≤ 5 s, 15 s cooldown): self test in both runtimes; cannot fire in a real race until a third racer is ready
+- [x] 5.3 Finish window and DNF classification (done in Slice 4)
+- [x] 5.4 Handicap (`-Handicap`, menu toggle, `?Handicap=1`) from cruise × card `pace`; unstick unchanged; fixed: after a reset the progress walk restarts at the spawn's segment (an off-track reset loop on curves, also in Unity)
+- [x] 5.5 Contact audit (`FContactAudit`, always on in Unreal, `--audit` in Python, identical lines), `-ContactGate` exit 4; bump count in the result line; `footGeoms` on the cards
 
 ## Slice 6 — All four tracks
 - [ ] 6.1 Banked surface geoms and visuals
