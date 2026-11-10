@@ -42,15 +42,15 @@ Plan approved 2026-11-10.
 - [x] 2.7 The race waits for the first drawn frame (a slow first frame used to swallow the countdown)
 
 ## Slice 3 — Matt and mixed fields
-- [ ] 3.1 Matt MJCF import, `HumanBrain`, parity gates
-- [ ] 3.2 `ARacerVisual` skinned mesh following physics
-- [ ] 3.3 Combined model (track + every ready racer), parking of unpicked racers
-- [ ] 3.4 Flat Oval; laps; seeded lane draw and speed spread
-- [ ] 3.5 `UCreatureDefinition` + registry
+- [x] 3.1 Matt: fingerprint, `racelib/human.py` + `FHumanRacer`; brain verified on MuJoCo 4.0.0 (`human_check.py`); races identical to Python in Unreal
+- [x] 3.2 `ARacerVisual`: Matt's skinned scan posed from his bodies; his capsules hidden
+- [x] 3.3 Track model with every eligible racer; `-Racers=` / `--racers` picks the grid, the rest parked and hidden; race impratio = the grid's lowest
+- [x] 3.4 Flat Oval (`L_FlatOval`), laps, seeded lanes and speeds: 2-lap races identical to Python
+- [ ] 3.5 Creature registry in Unreal: moved to 4.2 (the menu's roster needs it; races read the JSON cards)
 
 ## Slice 4 — Game loop
 - [ ] 4.1 `ARaceHUD` corners and standings
-- [ ] 4.2 Menu: track, roster, laps, eligibility
+- [ ] 4.2 Menu: track, roster, laps, eligibility; creature + track registry from the JSON cards (from 3.5)
 - [ ] 4.3 Intro, countdown, results card, pause sheet
 - [ ] 4.4 Follow camera
 - [ ] 4.5 `-RaceUiTest`, `-Shots`, `-AutoOk`; UI report

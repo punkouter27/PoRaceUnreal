@@ -107,11 +107,12 @@ def build(track_id, racer_cards):
       continue
     prefix = c["racerName"].lower() + "_"
     child = mujoco.MjSpec.from_file(str(ROOT / c["model"]))
-    frame = wb.add_frame(pos=[0, 2.0 * i, c["homeHeight"]])   # placeholder pose: the race spawns every racer itself
+    frame = wb.add_frame(pos=[-40.0, -40.0 + 3.0 * i, c["homeHeight"] + 5.0])   # placeholder (parking) pose: the race places every racer itself
     frame.attach_body(child.body(c["rootBody"]), prefix, "")
     roster.append({"name": c["racerName"], "card": cname, "prefix": prefix, "creature": c["id"], "fingerprint": c["fingerprint"],
                    "color": c["racerColor"], "cruise": c["cruise"], "maxYawRate": c["maxYawRate"], "homeHeight": c["homeHeight"],
-                   "usesUnstick": c["usesUnstick"], "brain": c["brains"][track.terrain], "getupBrain": c["brains"]["getup"]})
+                   "usesUnstick": c["usesUnstick"], "holdsHeadingAtRest": c.get("holdsHeadingAtRest", False), "impratio": c.get("impratio", 100.0),
+                   "kind": c["kind"], "brain": c["brains"][track.terrain], "getupBrain": c["brains"].get("getup", "")})
 
   m = spec.compile()
   ASSETS.mkdir(parents=True, exist_ok=True); MODELS.mkdir(parents=True, exist_ok=True)

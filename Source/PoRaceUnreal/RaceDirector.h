@@ -28,7 +28,7 @@ public:
 
 	/** Chase offsets, metres: behind the pack, above it, and the height the camera looks at. */
 	UPROPERTY(EditAnywhere, Category = "PoRace")
-	FVector Chase = FVector(4.5, 1.2, 1.8);
+	FVector Chase = FVector(5.5, 1.2, 2.8);
 
 	UPROPERTY(EditAnywhere, Category = "PoRace")
 	float LookHeight = 0.25f;
@@ -39,9 +39,11 @@ public:
 private:
 	TWeakObjectPtr<URacerController> Controller;
 	FRaceHud Race;
-	bool bChaosChecked = false, bMarkerChecked = false, bHaveCamera = false, bSawRace = false;
+	bool bChaosChecked = false, bMarkerChecked = false, bHaveCamera = false, bSawRace = false, bParkedHidden = false;
 	int32 Ticks = 0, ShotsTaken = 0;
 	FString ShotDir;
+	double QuitAt = -1.0, WaitedSeconds = 0.0;
+	bool bGaveUp = false;
 	FVector CamPos = FVector::ZeroVector, CamFwd = FVector::ForwardVector;
 	void CheckChaos();
 	void CheckMarkers(float DeltaSeconds);

@@ -14,6 +14,9 @@ import unreal
 PROJ = unreal.Paths.convert_relative_path_to_full(unreal.Paths.project_dir())
 ASSETS = unreal.EditorAssetLibrary
 tools = unreal.AssetToolsHelpers.get_asset_tools()
+# a commandlet starts before the asset registry has scanned Content: without this, does_asset_exist() answered False for
+# a Blueprint that was there, the old one was never deleted and the new import could not take its name (Slice 3)
+unreal.AssetRegistryHelpers.get_asset_registry().scan_paths_synchronous(["/Game"], True)
 MODEL = os.environ.get("RACE_MODEL", "training/assets/go2/scene_porace.xml")
 BRAIN = os.environ.get("RACE_BRAIN", "training/models/brains/go2_loco.onnx")
 LEVEL = "/Game/Levels/L_Testbed"

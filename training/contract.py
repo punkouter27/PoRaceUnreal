@@ -52,7 +52,7 @@ def floats(x):
   return [float(v) for v in np.asarray(x).ravel()]
 
 
-def model_numbers(m):
+def model_numbers(m, root_body=G.ROOT_BODY):
   """The training model's own numbers, by name, for Unreal to write back over URLab's rebuild of it.
 
   URLab rebuilds the model from its components and gets some of it wrong (measured 2026-11-10 on the Go2): the free
@@ -64,14 +64,14 @@ def model_numbers(m):
   name = lambda t, i: mujoco.mj_id2name(m, t, i)  # noqa: E731
   # The creature is the body tree under its root; everything else in the scene (floor, testbed cubes) is "optional":
   # written when the model has it, skipped quietly on a track that does not.
-  root = mujoco.mj_name2id(m, T.mjOBJ_BODY, G.ROOT_BODY)
+  root = mujoco.mj_name2id(m, T.mjOBJ_BODY, root_body)
   mine = lambda b: int(m.body_rootid[b]) == root  # noqa: E731
   opt = lambda b: {} if mine(b) else {"optional": True}  # noqa: E731
   bodies = {name(T.mjOBJ_BODY, b): {"mass": float(m.body_mass[b]), "inertia": floats(m.body_inertia[b]), "ipos": floats(m.body_ipos[b]),
                                     "iquat": floats(m.body_iquat[b]), "pos": floats(m.body_pos[b]), "quat": floats(m.body_quat[b]), **opt(b)}
             for b in range(1, m.nbody)}
   for k in ("pos", "quat"):   # a free body's pose is its joint's state: on a track the race places it, not the card
-    bodies[G.ROOT_BODY].pop(k)
+    bodies[root_body].pop(k)
   joints = []
   for j in range(m.njnt):
     d0, nd = int(m.jnt_dofadr[j]), {0: 6, 1: 3}.get(int(m.jnt_type[j]), 1)
@@ -163,8 +163,37 @@ namespace RaceContract
 """
 
 
+def human_fingerprint(creature):
+  """A human racer (G1 joint layout, tools/blender/matt_mjcf.py): Matt, later Grandma. Joints are the actuators' names
+  (matt_mjcf names each actuator after its joint); the start pose is the "knees_bent" keyframe."""
+  path = ROOT / "training" / creature / "assets" / f"{creature}_porace.xml"
+  m = mujoco.MjModel.from_xml_path(str(path))
+  T = mujoco.mjtObj
+  key = mujoco.mj_name2id(m, T.mjOBJ_KEY, "knees_bent")
+  joints = [mujoco.mj_id2name(m, T.mjOBJ_ACTUATOR, a) for a in range(m.nu)]
+  qadr = [int(m.jnt_qposadr[mujoco.mj_name2id(m, T.mjOBJ_JOINT, j)]) for j in joints]
+  assert m.nu == 29 and abs(m.opt.timestep - G.SIM_DT) < 1e-12
+  return {
+      "creature": creature,
+      "mujoco": MUJOCO_VERSION,
+      "source": path.relative_to(ROOT).as_posix(),
+      "option": option(m),
+      "root_body": "pelvis",
+      "joints": joints,
+      "actuators": joints,
+      "default_pose": [float(m.key_qpos[key][a]) for a in qadr],
+      "home_height": float(m.key_qpos[key][2]),
+      "pelvis_rest_z": float(m.body_pos[mujoco.mj_name2id(m, T.mjOBJ_BODY, "pelvis")][2]),   # the rig's Hips head: the skin's anchor
+      "mass": float(m.body_subtreemass[mujoco.mj_name2id(m, T.mjOBJ_BODY, "pelvis")]),
+      "qpos_names": qpos_names(m),
+      "qpos_home": [float(x) for x in m.key_qpos[key]],
+      "model": model_numbers(m, "pelvis"),
+  }
+
+
 TARGETS = {
     ROOT / "training" / "models" / "go2_fingerprint.json": lambda: json.dumps(go2_fingerprint(), indent=1) + "\n",
+    ROOT / "training" / "models" / "matt_fingerprint.json": lambda: json.dumps(human_fingerprint("matt"), indent=1) + "\n",
     ROOT / "Source" / "PoRaceUnreal" / "RaceContract.gen.h": header,
 }
 

@@ -102,6 +102,10 @@ public:
 	 *  before drawing) ran the countdown, and most of the race, before anyone could see it. */
 	void MarkGameReady() { bGameReady.store(true, std::memory_order_release); }
 
+	/** Racers of the track model that are not on this race's grid (fixed once bound). */
+	bool IsParked(const FString& Prefix) const { return ParkedPrefixes.Contains(Prefix); }
+	const TArray<int32>& ParkedRoots() const { return ParkedRootBodies; }
+
 	/** The level's race controller: the one on a live actor of World (never a stale Blueprint copy). */
 	static URacerController* Find(const UWorld* World);
 
@@ -109,7 +113,10 @@ private:
 	bool bReady = false, bRace = false, bTest = false, bStarted = false, bReported = false;
 	std::atomic<bool> bGameReady = false;
 	double WaitLogAt = 0.0;
-	TArray<TUniquePtr<FGo2Racer>> Racers;
+	TArray<TUniquePtr<FRacer>> Racers;	// every racer of the model, on the grid or parked
+	TArray<FString> ParkedPrefixes;
+	TArray<int32> ParkedRootBodies;
+	class FGo2Racer* Testbed = nullptr;
 	FRaceRules Rules;
 	int32 RequestedLaps = 0;
 

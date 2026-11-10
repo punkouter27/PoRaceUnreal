@@ -12,6 +12,7 @@ Builds /Game/Levels/L_<Track>:
   - sun, sky, fog, the director (ARaceDirector) and its chase camera
 Chaos stays out: nothing placed here collides or simulates. MuJoCo (URLab) owns all physics.
 """
+import json
 import math
 import os
 import sys
@@ -24,6 +25,9 @@ from racelib.track import Track, left  # noqa: E402  (pure Python: math + json)
 
 ASSETS = unreal.EditorAssetLibrary
 tools = unreal.AssetToolsHelpers.get_asset_tools()
+# a commandlet starts before the asset registry has scanned Content: without this, does_asset_exist() answered False for
+# a Blueprint that was there, the old one was never deleted and the new import could not take its name (Slice 3)
+unreal.AssetRegistryHelpers.get_asset_registry().scan_paths_synchronous(["/Game"], True)
 MEL = unreal.MaterialEditingLibrary
 TRACK = os.environ.get("RACE_TRACK", "planar_sprint")
 PASCAL = "".join(w.capitalize() for w in TRACK.split("_"))
@@ -65,6 +69,61 @@ def tint(name, rgb):
 
 
 track = Track.load(TRACK)
+FP = json.loads(open(os.path.join(PROJ, f"training/models/tracks/{TRACK}_fingerprint.json"), encoding="utf-8").read())
+
+
+def human_skin(card):
+    """A human racer's scan as a skeletal mesh (no physics asset: MuJoCo owns the body) and its material, imported once
+    into /Game/Racers/<Name>/. RACE_REIMPORT=1 redoes it."""
+    name = card["racerName"]
+    folder, mesh_path, mat_path = f"/Game/Racers/{name}", f"/Game/Racers/{name}/SK_{name}", f"/Game/Racers/{name}/M_{name}"
+    if os.environ.get("RACE_REIMPORT") != "1" and ASSETS.does_asset_exist(mesh_path) and ASSETS.does_asset_exist(mat_path):
+        return ASSETS.load_asset(mesh_path), ASSETS.load_asset(mat_path)
+    src = f"Content/Art/Exports/{name}/{name.lower()}.fbx"
+    fbx = unreal.FbxImportUI()
+    for k, v in (("import_mesh", True), ("import_as_skeletal", True), ("import_materials", False), ("import_textures", False),
+                 ("import_animations", False), ("create_physics_asset", False), ("mesh_type_to_import", unreal.FBXImportType.FBXIT_SKELETAL_MESH)):
+        fbx.set_editor_property(k, v)
+    t = unreal.AssetImportTask()
+    t.filename, t.destination_path, t.destination_name = os.path.join(PROJ, src), folder, f"SK_{name}"
+    t.automated, t.replace_existing, t.save, t.options = True, True, True, fbx
+    tools.import_asset_tasks([t])
+    mesh = next(ASSETS.load_asset(x) for x in t.imported_object_paths if isinstance(ASSETS.load_asset(x), unreal.SkeletalMesh))
+    log(f"{name}: skeletal mesh {mesh.get_path_name()}")
+    tex = {}
+    for key, fname in (("color", "albedo"), ("normal", "normal"), ("orm", "orm")):
+        f = f"Content/Art/Exports/{name}/Textures/{name.lower()}_{fname}.png"
+        if os.path.isfile(os.path.join(PROJ, f)):
+            tex[key] = import_file(f, f"{folder}/Textures", f"T_{name}_{key}")[0]
+    if "normal" in tex:
+        tex["normal"].set_editor_property("compression_settings", unreal.TextureCompressionSettings.TC_NORMALMAP)
+    if "orm" in tex:
+        tex["orm"].set_editor_property("srgb", False)
+        tex["orm"].set_editor_property("compression_settings", unreal.TextureCompressionSettings.TC_MASKS)
+    for t2 in tex.values():
+        ASSETS.save_loaded_asset(t2)
+    if ASSETS.does_asset_exist(mat_path):
+        ASSETS.delete_asset(mat_path)
+    mat = tools.create_asset(f"M_{name}", folder, unreal.Material, unreal.MaterialFactoryNew())
+    mat.set_editor_property("used_with_skeletal_mesh", True)
+    y = 0
+    for key, prop, out in (("color", unreal.MaterialProperty.MP_BASE_COLOR, "RGB"), ("normal", unreal.MaterialProperty.MP_NORMAL, "RGB")):
+        if key in tex:
+            smp = MEL.create_material_expression(mat, unreal.MaterialExpressionTextureSample, -400, y); y += 250
+            smp.set_editor_property("texture", tex[key])
+            if key == "normal":
+                smp.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_NORMAL)
+            MEL.connect_material_property(smp, out, prop)
+    if "orm" in tex:   # glTF ORM: R occlusion, G roughness, B metallic
+        smp = MEL.create_material_expression(mat, unreal.MaterialExpressionTextureSample, -400, y)
+        smp.set_editor_property("texture", tex["orm"])
+        smp.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_MASKS)
+        MEL.connect_material_property(smp, "R", unreal.MaterialProperty.MP_AMBIENT_OCCLUSION)
+        MEL.connect_material_property(smp, "G", unreal.MaterialProperty.MP_ROUGHNESS)
+        MEL.connect_material_property(smp, "B", unreal.MaterialProperty.MP_METALLIC)
+    MEL.recompile_material(mat)
+    ASSETS.save_loaded_asset(mat)
+    return mesh, mat
 
 # The level first: wipe and save it so the old Blueprint has no references left (URLab refuses to import over a
 # Blueprint the open level still instantiates).
@@ -78,8 +137,12 @@ if ASSETS.does_asset_exist(LEVEL):
 else:
     les.new_level(LEVEL)
 
-if ASSETS.does_asset_exist(BP):   # URLab won't overwrite; the model may have changed
-    ASSETS.delete_asset(BP)
+for old in (BP, f"{FOLDER}/{TRACK}"):   # URLab won't overwrite (the model may have changed); also an import a failed rename left
+    disk = os.path.join(PROJ, "Content", old[len("/Game/"):] + ".uasset")
+    if os.path.isfile(disk):   # the file on disk, not does_asset_exist(): that missed a leftover import once (Slice 3)
+        ASSETS.delete_asset(old)
+    if os.path.isfile(disk):
+        raise RuntimeError(f"{disk} survived its delete: still referenced? URLab refuses to import over it")
 track_bp = next(a for a in import_file(f"training/assets/tracks/{TRACK}.xml", FOLDER) if isinstance(a, unreal.Blueprint))
 ASSETS.rename_asset(track_bp.get_path_name().split(".")[0], BP)   # URLab names it after the XML
 track_bp = ASSETS.load_asset(BP)
@@ -174,6 +237,21 @@ while s < track.length - 0.5:
     marks += 1
     s += track.checkpoint_spacing
 log(f"{track.name}: {tiles} tiles, {marks} checkpoint marks")
+
+# ---- human racers: the scan, posed from the MuJoCo bodies (ARacerVisual); URLab's capsules are hidden at run time
+for r in FP["racers"]:
+    card = json.loads(open(os.path.join(PROJ, f"training/characters/{r['card']}.json"), encoding="utf-8").read())
+    if card.get("kind") != "human":
+        continue
+    creature = json.loads(open(os.path.join(PROJ, card["fingerprint"]), encoding="utf-8").read())
+    mesh, mat = human_skin(card)
+    v = spawn(unreal.RacerVisual, f"{card['racerName']}Visual")
+    v.set_editor_property("prefix", r["prefix"])
+    v.set_editor_property("pelvis_rest_z", creature["pelvis_rest_z"])
+    comp = v.get_component_by_class(unreal.PoseableMeshComponent)
+    comp.set_skinned_asset_and_update(mesh)
+    comp.set_material(0, mat)
+    log(f"{card['racerName']}: visual placed (bones are matched at run time: ARacerVisual logs any it cannot find)")
 
 # ---- light and air
 sun = spawn(unreal.DirectionalLight, "Sun", rot=(-42, 35, 0))

@@ -7,7 +7,8 @@
 #include "CoreMinimal.h"
 #include <mujoco/mujoco.h>
 #include "RaceTrack.h"
-#include "RacerGo2.h"
+#include "RaceContract.gen.h"
+#include "Racer.h"
 
 enum class ERacePhase : uint8 { Countdown, Racing, Finished };
 
@@ -15,9 +16,11 @@ struct FRaceEntry
 {
 	FString Name;
 	FLinearColor Color = FLinearColor::White;
-	FGo2Racer* Racer = nullptr;
+	FRacer* Racer = nullptr;
 	double Cruise = 1.5, MaxYaw = 1.2;
 	bool bUsesUnstick = true;
+	bool bHoldsHeading = false;	// steer to the track heading during the countdown (a brain that drifts on a zero command)
+	double ImpRatio = 100.0;		// the impratio its brain was trained at; the race runs at the grid's lowest
 
 	double Lane = 0.0, Speed = 0.0, Aggression = 0.0;
 	double Distance = 0.0, Lateral = 0.0;
@@ -45,6 +48,7 @@ public:
 
 	FRaceTrack Track;
 	TArray<FRaceEntry> Entries;
+	TArray<FRacer*> Parked;		// racers of the track model not on the grid: held still off the track
 	uint64 Seed = 1;
 	int32 Laps = 1;
 	double FlipAt = -1.0;
@@ -54,6 +58,7 @@ public:
 	int64 Step = 0, RaceStart = -1;
 	int32 Finished = 0, Flips = 0;
 	double Total = 0.0;
+	double ImpRatio = 100.0;		// this race's (Setup)
 
 	/** Laps, the seeded draw, every racer reset onto its grid slot. Call once, before the first PreStep. */
 	void Setup(const mjModel* m, mjData* d, int32 RequestedLaps);
@@ -69,6 +74,7 @@ public:
 	FString ResultLine() const;
 
 private:
+	void HoldParked(mjData* d) const;
 	void Spawn(FRaceEntry& E, double S) const;
 	double Progress(FRaceEntry& E, const FVector2D& Pos, double& OutLateral) const;
 	int32 Leader() const;

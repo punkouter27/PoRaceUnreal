@@ -11,6 +11,8 @@
 #include "RaceContract.gen.h"
 #include "RaceHUD.h"
 #include "RaceModel.h"
+#include "RacerGo2.h"
+#include "RacerHuman.h"
 #include "RaceNames.h"
 
 DEFINE_LOG_CATEGORY(LogRace);
@@ -96,6 +98,9 @@ bool URacerController::BindRace(mjModel* m, mjData* d)
 	FParse::Value(Cmd, TEXT("Laps="), RequestedLaps);
 	double FlipAt = -1.0;
 	FParse::Value(Cmd, TEXT("RaceFlipAt="), FlipAt);
+	FString Picks;	// -Racers=blue,matt: who is on the grid (default every racer of the track model)
+	TArray<FString> Want;
+	if (FParse::Value(Cmd, TEXT("Racers="), Picks, false)) Picks.ToLower().ParseIntoArray(Want, TEXT(","));
 
 	const TSharedPtr<FJsonObject> Fp = Race::LoadJson(TrackFingerprint);
 	if (!Fp) return false;
@@ -108,6 +113,9 @@ bool URacerController::BindRace(mjModel* m, mjData* d)
 	int32 Missing = RaceModel::ApplyNumbers(m, *Fp->GetObjectField(TEXT("world")), FString());
 	TMap<FString, TSharedPtr<FJsonObject>> Creatures;
 	Rules.Entries.Reset();
+	Rules.Parked.Reset();
+	ParkedPrefixes.Reset();
+	ParkedRootBodies.Reset();
 	bool bOk = true;
 	for (const TSharedPtr<FJsonValue>& V : Fp->GetArrayField(TEXT("racers")))
 	{
@@ -119,20 +127,50 @@ bool URacerController::BindRace(mjModel* m, mjData* d)
 		if (!Creature) { bOk = false; continue; }
 		Missing += RaceModel::ApplyNumbers(m, *Creature->GetObjectField(TEXT("model")), Prefix);
 
-		TUniquePtr<FGo2Racer> Racer = MakeUnique<FGo2Racer>();
-		bOk &= Racer->Bind(m, Prefix, R.GetNumberField(TEXT("homeHeight")));
-		const FString LocoName = R.GetStringField(TEXT("brain")), GetupName = R.GetStringField(TEXT("getupBrain"));
-		bOk &= Racer->Loco.Load(LoadBrainFile(FString::Printf(TEXT("training/models/brains/%s.onnx"), *LocoName)));
-		bOk &= Racer->Getup.Load(LoadBrainFile(FString::Printf(TEXT("training/models/brains/%s.onnx"), *GetupName)));
-
+		const FString CardName = R.GetStringField(TEXT("card"));
+		const TSharedPtr<FJsonObject> Card = Race::LoadJson(FString::Printf(TEXT("training/characters/%s.json"), *CardName));
+		if (!Card) { bOk = false; continue; }
+		const FString LocoName = R.GetStringField(TEXT("brain"));
+		FString GetupName;
+		R.TryGetStringField(TEXT("getupBrain"), GetupName);
+		auto BrainFile = [&](const FString& Name) { return LoadBrainFile(FString::Printf(TEXT("training/models/brains/%s.onnx"), *Name)); };
+		TUniquePtr<FRacer> Racer;
+		if (Card->GetStringField(TEXT("kind")) == TEXT("human"))
+		{
+			TUniquePtr<FHumanRacer> H = MakeUnique<FHumanRacer>();
+			bOk &= H->Bind(m, Prefix, *Card, *Creature);
+			bOk &= H->Loco.Load(BrainFile(LocoName));
+			Racer = MoveTemp(H);
+		}
+		else
+		{
+			TUniquePtr<FGo2Racer> G = MakeUnique<FGo2Racer>();
+			bOk &= G->Bind(m, Prefix, R.GetNumberField(TEXT("homeHeight")));
+			bOk &= G->Loco.Load(BrainFile(LocoName));
+			bOk &= G->Getup.Load(BrainFile(GetupName));
+			Racer = MoveTemp(G);
+		}
+		const FString Name = R.GetStringField(TEXT("name"));
+		if (Want.Num() && !Want.Contains(Name.ToLower()))
+		{
+			UE_LOG(LogRace, Log, TEXT("racer %s (%s): parked (not on the grid)"), *Name, *Prefix);
+			Rules.Parked.Add(Racer.Get());
+			ParkedPrefixes.Add(Prefix);
+			ParkedRootBodies.Add(m->body_rootid[Racer->BaseBody()]);
+			Racers.Add(MoveTemp(Racer));
+			continue;
+		}
 		FRaceEntry& E = Rules.Entries.AddDefaulted_GetRef();
-		E.Name = R.GetStringField(TEXT("name"));
+		E.Name = Name;
 		E.Color = Color(R, TEXT("color"));
 		E.Cruise = R.GetNumberField(TEXT("cruise"));
 		E.MaxYaw = R.GetNumberField(TEXT("maxYawRate"));
 		E.bUsesUnstick = R.GetBoolField(TEXT("usesUnstick"));
+		Card->TryGetBoolField(TEXT("holdsHeadingAtRest"), E.bHoldsHeading);
+		Card->TryGetNumberField(TEXT("impratio"), E.ImpRatio);
 		E.Racer = Racer.Get();
-		UE_LOG(LogRace, Log, TEXT("racer %s (%s): brains %s + %s, cruise %.2f m/s"), *E.Name, *Prefix, *LocoName, *GetupName, E.Cruise);
+		UE_LOG(LogRace, Log, TEXT("racer %s (%s, %s): brains %s%s%s, cruise %.2f m/s, impratio %g"), *E.Name, *Prefix, *Card->GetStringField(TEXT("kind")),
+			*LocoName, GetupName.IsEmpty() ? TEXT("") : TEXT(" + "), *GetupName, E.Cruise, E.ImpRatio);
 		Racers.Add(MoveTemp(Racer));
 	}
 	mj_setConst(m, d);
@@ -172,7 +210,7 @@ void URacerController::PublishHud(const mjData* d)
 		Row.Lap = E.Lap;
 		Row.Place = E.Place;
 		Row.State = E.State;
-		Row.bGettingUp = !E.Racer->Locomoting();
+		Row.bGettingUp = E.Racer->Recovering();
 		Row.BaseBody = E.Racer->BaseBody();
 		Row.PosUE = MjUtils::MjToUEPosition(d->qpos + E.Racer->RootQpos());
 		if (E.FinishTime < 0.0) { Mean += E.Distance; ++Running; }
@@ -227,6 +265,7 @@ bool URacerController::BindTestbed(mjModel* m, mjData* d)
 
 	TUniquePtr<FGo2Racer> Racer = MakeUnique<FGo2Racer>();
 	bool bOk = Racer->Bind(m, FString(), 0.27) && Missing == 0;
+	Testbed = Racer.Get();
 
 	TArray<double> Q0 = Race::Numbers(Fp->GetArrayField(TEXT("qpos_home")));
 	if (Mode == ERaceControlMode::Replay)
@@ -314,7 +353,7 @@ void URacerController::ComputeAndApply(mjModel* m, mjData* d, uint8 Source)
 		}
 		else
 		{
-			for (TUniquePtr<FGo2Racer>& R : Racers) { R->Target[0] = R->Target[1] = R->Target[2] = 0.0; R->Control(m, d); }
+			for (FRaceEntry& E : Rules.Entries) { E.Racer->Target[0] = E.Racer->Target[1] = E.Racer->Target[2] = 0.0; E.Racer->Control(m, d); }
 			if (!bReported) Finish();
 		}
 		++StepCount;
@@ -338,7 +377,7 @@ void URacerController::ComputeAndApply(mjModel* m, mjData* d, uint8 Source)
 	}
 	else
 	{
-		FGo2Racer& R = *Racers[0];
+		FGo2Racer& R = *Testbed;
 		R.Target[0] = Command.X;
 		R.Target[1] = Command.Y;
 		R.Target[2] = Command.Z;

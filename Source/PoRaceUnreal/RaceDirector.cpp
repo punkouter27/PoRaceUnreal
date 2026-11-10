@@ -28,6 +28,7 @@ void ARaceDirector::BeginPlay()
 	UE_LOG(LogRace, Log, TEXT("director: BeginPlay (camera %s, tick %s)"), Camera ? *Camera->GetName() : TEXT("none"),
 		IsActorTickEnabled() ? TEXT("on") : TEXT("off"));
 	if (FParse::Value(FCommandLine::Get(), TEXT("RaceShots="), ShotDir)) ShotDir = FPaths::ConvertRelativePathToFull(ShotDir);
+	FParse::Value(FCommandLine::Get(), TEXT("RaceQuitAt="), QuitAt);
 	if (Camera)
 	{
 		// a chase camera swings hard when the pack turns or a racer flips: no motion blur
@@ -114,7 +115,19 @@ void ARaceDirector::Tick(float DeltaSeconds)
 	if (!Controller.IsValid()) return;
 	Controller->MarkGameReady();
 	Controller->GetHud(Race);
-	if (!Race.bRace || Race.Rows.Num() == 0) return;
+	if (!Race.bRace || Race.Rows.Num() == 0)
+	{
+		// the race never started: the model failed to compile or the controller failed to bind (both log why). A race
+		// test exits instead of waiting for ever (Slice 3: three parallel launches broke URLab's mesh cache and hung).
+		WaitedSeconds += DeltaSeconds;
+		if (!bGaveUp && WaitedSeconds > 240.0 && FParse::Param(FCommandLine::Get(), TEXT("RaceTest")))
+		{
+			bGaveUp = true;
+			Fail(TEXT("race start: no race 240 s after the first drawn frame (model compile or bind failed: see LogURLab / LogRace above)"));
+			FPlatformMisc::RequestExitWithStatus(false, 2);
+		}
+		return;
+	}
 	if (!bSawRace)
 	{
 		bSawRace = true;
@@ -123,9 +136,34 @@ void ARaceDirector::Tick(float DeltaSeconds)
 	}
 
 	if (!bChaosChecked) CheckChaos();
+	if (!bParkedHidden)	// racers parked off the grid are not drawn (they float still 40 m off the track)
+	{
+		bParkedHidden = true;
+		const mjModel* m = AAMjManager::Instance && AAMjManager::Instance->PhysicsEngine ? AAMjManager::Instance->PhysicsEngine->GetModel() : nullptr;
+		int32 Hidden = 0;
+		if (m && Controller->ParkedRoots().Num())
+			for (TActorIterator<AActor> It(GetWorld()); It; ++It)
+			{
+				TInlineComponentArray<UMjBody*> Bodies(*It);
+				for (UMjBody* B : Bodies)
+				{
+					const int32 Id = B->GetMj().id;
+					if (Id > 0 && Id < m->nbody && Controller->ParkedRoots().Contains(m->body_rootid[Id])) { B->SetVisibility(false, true); ++Hidden; }
+				}
+			}
+		UE_LOG(LogRace, Log, TEXT("director: %d parked racers, %d drawn bodies hidden"), Controller->ParkedRoots().Num(), Hidden);
+	}
 	// standing on the grid 1 s into the countdown: the reset that put them there has long been drawn. (Right after the
 	// reset the drawn pose is a frame behind the teleport: a 25 cm "gap" that is not a coordinate error.)
 	if (!bMarkerChecked && (Race.Phase != ERacePhase::Countdown || Race.CountdownLeft < 2.0)) CheckMarkers(DeltaSeconds);
+
+	// -RaceQuitAt=<s>: leave once the race clock passes s seconds (quick visual checks)
+	if (QuitAt >= 0.0 && Race.Phase != ERacePhase::Countdown && Race.RaceTime >= QuitAt)
+	{
+		QuitAt = -1.0;
+		UE_LOG(LogRace, Display, TEXT("[RaceQuitAt] %.2f s: leaving"), Race.RaceTime);
+		FPlatformMisc::RequestExit(false);
+	}
 
 	// -RaceShots=<dir>: screenshots with the HUD on the grid, mid-race, after a flip and at the finish (UI reports)
 	if (!ShotDir.IsEmpty())

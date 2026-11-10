@@ -1,41 +1,9 @@
 #include "RacerGo2.h"
 
-#include "NNE.h"
-#include "NNEModelData.h"
-#include "NNERuntimeCPU.h"
 #include "RaceNames.h"
 #include <cmath>
 
 using namespace RaceContract;
-
-bool FRaceBrain::Load(UNNEModelData* Data)
-{
-	Net.Reset();
-	NumIn = 0;
-	if (!Data) return false;
-	// ORT on desktop (bit-exact with training's onnxruntime). Android has no ORT in UE 5.8: Slice 12 adds Basic CPU.
-	TWeakInterfacePtr<INNERuntimeCPU> Runtime = UE::NNE::GetRuntime<INNERuntimeCPU>(TEXT("NNERuntimeORTCpu"));
-	TSharedPtr<UE::NNE::IModelCPU> Model = Runtime.IsValid() ? Runtime->CreateModelCPU(Data) : nullptr;
-	Net = Model ? Model->CreateModelInstanceCPU() : nullptr;
-	if (!Net)
-	{
-		UE_LOG(LogRace, Error, TEXT("brain %s: NNERuntimeORTCpu could not load it"), *Data->GetName());
-		return false;
-	}
-	const TConstArrayView<int32> In = Net->GetInputTensorDescs()[0].GetShape().GetData();
-	NumIn = In.Num() > 1 && In[1] > 0 ? In[1] : 0;
-	const uint32 Shape[] = { 1, (uint32)NumIn };
-	Net->SetInputTensorShapes({ UE::NNE::FTensorShape::Make(Shape) });
-	Label = Data->GetName();
-	return NumIn > 0;
-}
-
-bool FRaceBrain::Run(const float* InObs, float* OutAction, int32 NumAction) const
-{
-	const UE::NNE::FTensorBindingCPU In{ (void*)InObs, (uint64)NumIn * sizeof(float) };
-	const UE::NNE::FTensorBindingCPU Out{ OutAction, (uint64)NumAction * sizeof(float) };
-	return Net->RunSync({ In }, { Out }) == UE::NNE::EResultStatus::Ok;
-}
 
 bool FGo2Racer::Bind(const mjModel* m, const FString& InPrefix, double InHomeHeight)
 {
@@ -53,14 +21,9 @@ bool FGo2Racer::Bind(const mjModel* m, const FString& InPrefix, double InHomeHei
 		Qadr[i] = J >= 0 ? m->jnt_qposadr[J] : -1;
 		Vadr[i] = J >= 0 ? m->jnt_dofadr[J] : -1;
 	}
-	Base = Race::Find(m, mjOBJ_BODY, m->nbody, Prefix + TEXT("base"));
-	bOk &= Base >= 0 && m->body_jntnum[Base] > 0;
-	if (bOk)
-	{
-		const int32 Root = m->body_jntadr[Base];
-		RootQ = m->jnt_qposadr[Root];
-		RootV = m->jnt_dofadr[Root];
-	}
+	bOk &= ResolveRoot(m, TEXT("base"));
+	JointDofs.Reset();
+	for (int32 i = 0; i < Nu; ++i) JointDofs.Add(Vadr[i]);
 	Imu = Race::Find(m, mjOBJ_SITE, m->nsite, Prefix + TEXT("imu"));
 	auto Sensor = [&](const TCHAR* Name) { const int32 S = Race::Find(m, mjOBJ_SENSOR, m->nsensor, Prefix + Name); return S >= 0 ? m->sensor_adr[S] : -1; };
 	AdrLinvel = Sensor(TEXT("local_linvel"));
@@ -86,35 +49,11 @@ void FGo2Racer::Clear()
 	bDecided = false;
 }
 
-double FGo2Racer::Yaw(const mjData* d) const
-{
-	const double W = d->qpos[RootQ + 3], X = d->qpos[RootQ + 4], Y = d->qpos[RootQ + 5], Z = d->qpos[RootQ + 6];
-	return std::atan2(2.0 * (W * Z + X * Y), 1.0 - 2.0 * (Y * Y + Z * Z));
-}
-
-double FGo2Racer::PlanarSpeed2(const mjData* d) const
-{
-	const double Vx = d->qvel[RootV], Vy = d->qvel[RootV + 1];
-	return Vx * Vx + Vy * Vy;
-}
-
 bool FGo2Racer::UpdateState(const mjModel* m, mjData* d)
 {
 	const double Up = UpZ(d);
 	State = Up <= 0.0 ? ERacerState::Fallen : Up < StumbleZ ? ERacerState::Stumble : ERacerState::Racing;
-	FallenFor = State == ERacerState::Fallen ? FallenFor + 1 : 0;
-	const bool bWants = Target[0] * Target[0] + Target[1] * Target[1] + Target[2] * Target[2] > 0.01;
-	StalledFor = bWants && PlanarSpeed2(d) < StallSpeed * StallSpeed ? StalledFor + 1 : 0;
-	const bool bNaN = std::isnan(d->qpos[RootQ + 2]) || std::isnan(d->qvel[RootV]);
-	if (bNaN || FallenFor > FallenSteps || StalledFor > StallSteps)
-	{
-		UE_LOG(LogRace, Log, TEXT("%sreset: %s fallen %d stalled %d steps -> (%.1f, %.1f)"), *Prefix,
-			bNaN ? TEXT("NaN state,") : TEXT(""), FallenFor, StalledFor, Spawn[0], Spawn[1]);
-		ResetToSpawn(m, d);
-		++Resets;
-		return true;
-	}
-	return false;
+	return AutoReset(m, d, State == ERacerState::Fallen);
 }
 
 void FGo2Racer::Control(const mjModel* m, mjData* d)

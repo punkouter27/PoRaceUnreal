@@ -1,6 +1,7 @@
 # Race regression: Unreal races for a set of seeds, each checked against the Python reference race.
 #
-#   powershell -ExecutionPolicy Bypass -File Scripts\regress.ps1 [-Track planar_sprint] [-Seeds 1,2,3,4,5] [-FlipAt 20] [-Parallel 3]
+#   powershell -ExecutionPolicy Bypass -File Scripts\regress.ps1 [-Track planar_sprint] [-Seeds "1,2,3,4,5"] [-Racers blue,matt]
+#       [-Laps 2] [-FlipAt 20] [-Parallel 3]
 #
 # Per seed:
 #   Unreal      UnrealEditor-Cmd -game -nullrhi -RaceTest (the level's checks gate it: exit 3 on a failed check)
@@ -14,6 +15,8 @@ param(
     [string]$Track = "planar_sprint",
     [string]$Seeds = "1,2,3,4,5",   # text: "powershell -File" passes 1,2,3 as one argument
     [double]$FlipAt = -1,
+    [string]$Racers = "",           # "blue,matt": who is on the grid (default every racer of the track model)
+    [int]$Laps = 0,                 # 0: the track's default
     [int]$Parallel = 3,
     [double]$Tolerance = 0.01
 )
@@ -29,6 +32,11 @@ $Level = "/Game/Levels/L_$Pascal"
 $Out = Join-Path $Root "Saved\PoRace\regress"
 New-Item -ItemType Directory -Force $Out | Out-Null
 $Py = @("run", "--no-project", "--python", "3.12", "--with", "mujoco==4.0.0", "--with", "onnxruntime", "--with", "numpy", "python")
+$Tag = if ($Racers) { "_" + ($Racers -replace ",", "-") } else { "" }
+$Extra = @()   # the same race for Python
+if ($FlipAt -ge 0) { $Extra += @("--flip-at", "$FlipAt") }
+if ($Racers) { $Extra += @("--racers", $Racers) }
+if ($Laps -gt 0) { $Extra += @("--laps", "$Laps") }
 
 function RaceLine([string]$Text) {
     $m = [regex]::Match($Text, "\[Race\] ((FINISHED|DNF) map=.*)")
@@ -44,13 +52,23 @@ $t0 = Get-Date
 $jobs = @()
 foreach ($s in $SeedList) {
     while (@($jobs | Where-Object { -not $_.Process.HasExited }).Count -ge $Parallel) { Start-Sleep -Milliseconds 500 }
-    $log = Join-Path $Out "ue_${Track}_$s.log"
-    $args = @("`"$Project`"", $Level, "-game", "-nullrhi", "-unattended", "-nosplash", "-nosound", "-RaceTest", "-Seed=$s", "-stdout", "-FullStdOutLogOutput")
-    if ($FlipAt -ge 0) { $args += "-RaceFlipAt=$FlipAt" }
-    $p = Start-Process -FilePath $Editor -ArgumentList $args -RedirectStandardOutput $log -RedirectStandardError "$log.err" -NoNewWindow -PassThru
+    $log = Join-Path $Out "ue_${Track}${Tag}_$s.log"
+    $ueArgs = @("`"$Project`"", $Level, "-game", "-nullrhi", "-unattended", "-nosplash", "-nosound", "-RaceTest", "-Seed=$s", "-stdout", "-FullStdOutLogOutput")
+    if ($FlipAt -ge 0) { $ueArgs += "-RaceFlipAt=$FlipAt" }
+    if ($Racers) { $ueArgs += "-Racers=$Racers" }
+    if ($Laps -gt 0) { $ueArgs += "-Laps=$Laps" }
+    $p = Start-Process -FilePath $Editor -ArgumentList $ueArgs -RedirectStandardOutput $log -RedirectStandardError "$log.err" -NoNewWindow -PassThru
     $null = $p.Handle   # read the handle now, or ExitCode comes back empty once the process has exited
     $jobs += [pscustomobject]@{ Seed = $s; Process = $p; Log = $log }
     Write-Host "Unreal seed $s started (pid $($p.Id))"
+    # Staggered: the next one starts only once this one has compiled its model. URLab writes each mesh to a shared
+    # cache file while compiling; three launches at once broke a save, the compile failed and the races hung (Slice 3).
+    $wait = Get-Date
+    while (-not $p.HasExited -and ((Get-Date) - $wait).TotalSeconds -lt 300) {
+        $text = if (Test-Path $log) { Get-Content $log -Raw -ErrorAction SilentlyContinue } else { "" }
+        if ($text -match "LogRace: (Display: )?MuJoCo \S+, track|Model compilation failed") { break }
+        Start-Sleep -Seconds 2
+    }
 }
 $jobs | ForEach-Object { $_.Process.WaitForExit() }
 Write-Host ("Unreal: {0} races in {1:N0} s" -f $SeedList.Count, ((Get-Date) - $t0).TotalSeconds)
@@ -67,9 +85,8 @@ try {
         $ue = RaceLine $text
         $code = $j.Process.ExitCode
         $checks = @([regex]::Matches($text, "\[Check\] ([^\r\n]*)") | ForEach-Object { $_.Groups[1].Value })
-        $flip = if ($FlipAt -ge 0) { @("--flip-at", "$FlipAt") } else { @() }
-        $exact = RaceLine ((& uv @Py race.py $Track --seed $s --mjb $Mjb @flip 2>&1) -join "`n")
-        $ref = RaceLine ((& uv @Py race.py $Track --seed $s @flip 2>&1) -join "`n")
+        $exact = RaceLine ((& uv @Py race.py $Track --seed $s --mjb $Mjb @Extra 2>&1) -join "`n")
+        $ref = RaceLine ((& uv @Py race.py $Track --seed $s @Extra 2>&1) -join "`n")
         $tu = Times $ue; $tr = Times $ref
         $worst = 0.0
         foreach ($a in $tu) { $b = $tr | Where-Object Name -eq $a.Name; if ($b) { $worst = [Math]::Max($worst, [Math]::Abs($a.T - $b.T) / $b.T) } else { $worst = 1.0 } }

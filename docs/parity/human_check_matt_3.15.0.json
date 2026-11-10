@@ -1,0 +1,47 @@
+{
+ "mujoco": "3.15.0",
+ "rows": [
+  {
+   "group": "replay",
+   "name": "matt recorded controls",
+   "ok": true,
+   "gate": false,
+   "note": "|dqpos| after 1 s 5.0e-10, 5 s 1.0e-05; under 1 mm for 5.00 s"
+  },
+  {
+   "group": "brain",
+   "name": "matt ONNX vs recorded actions",
+   "ok": true,
+   "gate": true,
+   "note": "worst action difference 1.5e-06 over 250 decisions"
+  },
+  {
+   "group": "closed",
+   "name": "matt brain in the loop, cmd 1.2",
+   "ok": true,
+   "gate": true,
+   "note": "first observation vs recorded 1.2e-08; after 5 s pelvis 0.0 cm from the recording; speed 1-5 s 1.077 m/s (recorded 1.077); lowest pelvis 0.801 m"
+  },
+  {
+   "group": "rung",
+   "name": "matt stand 10 s",
+   "ok": true,
+   "gate": true,
+   "note": "10/10 (need 10), worst error 0.00, mean vx 0.00 m/s"
+  },
+  {
+   "group": "rung",
+   "name": "matt race speeds 0.8/1.2/1.6 m/s",
+   "ok": true,
+   "gate": true,
+   "note": "10/10 (need 9), worst error 0.17, mean vx 1.07 m/s"
+  },
+  {
+   "group": "rung",
+   "name": "matt turn 0.8 rad/s at 1.0 m/s",
+   "ok": true,
+   "gate": true,
+   "note": "10/10 (need 9), worst error 0.03, mean vx 0.91 m/s"
+  }
+ ]
+}

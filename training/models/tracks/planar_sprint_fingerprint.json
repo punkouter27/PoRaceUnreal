@@ -194,8 +194,32 @@
    "maxYawRate": 1.2,
    "homeHeight": 0.27,
    "usesUnstick": true,
+   "holdsHeadingAtRest": false,
+   "impratio": 100.0,
+   "kind": "go2",
    "brain": "go2_loco",
    "getupBrain": "go2_getup"
+  },
+  {
+   "name": "Matt",
+   "card": "matt",
+   "prefix": "matt_",
+   "creature": "matt",
+   "fingerprint": "training/models/matt_fingerprint.json",
+   "color": [
+    1.0,
+    0.62,
+    0.18
+   ],
+   "cruise": 1.5,
+   "maxYawRate": 0.8,
+   "homeHeight": 0.9265,
+   "usesUnstick": false,
+   "holdsHeadingAtRest": true,
+   "impratio": 1.0,
+   "kind": "human",
+   "brain": "matt_loco",
+   "getupBrain": ""
   }
  ]
 }

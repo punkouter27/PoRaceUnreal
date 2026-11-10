@@ -37,9 +37,12 @@ try {
     Step "salvage" "Salvaged brains, models and cards load" { & uv @Py (Join-Path $Root "tools\salvage_check.py") }
     Step "contract" "Generated contract files are up to date" { & uv @Py contract.py --check }
     Step "brains" "Go2 brains pass their rungs on this MuJoCo" { & uv @Py version_check.py }
-    Step "race" "Reference race: Planar Sprint seed 1 finishes, and after a flip at 20 s" {
+    Step "brains" "Matt's brain reproduces his training run and passes his rungs" { & uv @Py human_check.py --creature matt }
+    Step "race" "Reference races: Planar Sprint (Blue + Matt, a flip, Matt flipped alone), Flat Oval 2 laps" {
         & uv @Py race.py planar_sprint --seed 1
         if ($LASTEXITCODE -eq 0) { & uv @Py race.py planar_sprint --seed 1 --flip-at 20 }
+        if ($LASTEXITCODE -eq 0) { & uv @Py race.py planar_sprint --seed 1 --racers matt --flip-at 20 }
+        if ($LASTEXITCODE -eq 0) { & uv @Py race.py flat_oval --seed 1 --laps 2 }
     }
     if ($Unreal -or $Only -eq "parity") {
         Step "parity" "Editor build" {

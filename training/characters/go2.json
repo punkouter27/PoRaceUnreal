@@ -39,5 +39,8 @@
   "steeple": "go2_loco_steeple",
   "getup": "go2_getup"
  },
- "_brains_note": "Locomotion brain per track terrain, as the Unity TrackBuilder assigned them (banked and steeple both run the graduated steeple brain s7; go2_loco_bank r7 is the fallback). Files: training/models/brains/<name>.onnx."
+ "_brains_note": "Locomotion brain per track terrain, as the Unity TrackBuilder assigned them (banked and steeple both run the graduated steeple brain s7; go2_loco_bank r7 is the fallback). Files: training/models/brains/<name>.onnx.",
+ "kind": "go2",
+ "holdsHeadingAtRest": false,
+ "impratio": 100.0
 }

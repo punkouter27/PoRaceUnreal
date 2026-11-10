@@ -5,6 +5,8 @@
     <flag eulerdamp="disable"/>
   </option>
 
+  <size nkey="2"/>
+
   <default>
     <default class="blue_main">
       <default class="blue_go2">
@@ -38,13 +40,19 @@
         </default>
       </default>
     </default>
+    <default class="matt_main">
+      <geom friction="0.6" rgba="0.75 0.55 0.45 1"/>
+      <site group="5" rgba="1 0 0 1"/>
+    </default>
   </default>
 
   <asset>
+    <texture type="2d" colorspace="auto" name="matt_groundplane" builtin="checker" mark="edge" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3" width="300" height="300"/>
     <material name="blue_metal" rgba="0.9 0.95 0.95 1"/>
     <material name="blue_black" rgba="0 0 0 1"/>
     <material name="blue_white"/>
     <material name="blue_gray" rgba="0.671705 0.692426 0.77427 1"/>
+    <material name="matt_groundplane" texture="matt_groundplane" texrepeat="5 5" texuniform="true"/>
     <mesh name="blue_base_0" content_type="model/obj" file="base_0.obj"/>
     <mesh name="blue_base_1" content_type="model/obj" file="base_1.obj"/>
     <mesh name="blue_base_2" content_type="model/obj" file="base_2.obj"/>
@@ -67,7 +75,7 @@
     <geom name="floor" size="0 0 0.01" type="plane" conaffinity="0" priority="1" friction="0.6" rgba="0.22 0.24 0.27 1"/>
     <geom name="rail_L0" size="56.06 0.05 0.15" pos="50 1.65 0.15" type="box" rgba="0.85 0.25 0.15 1"/>
     <geom name="rail_R0" size="56.06 0.05 0.15" pos="50 -1.65 0.15" type="box" rgba="0.85 0.25 0.15 1"/>
-    <frame pos="0 0 0.27">
+    <frame pos="-40 -40 5.27">
       <body name="blue_base" childclass="blue_go2" pos="0 0 0.445">
         <inertial pos="0.021112 0 -0.005366" quat="-0.000543471 0.713435 -0.00173769 0.700719" mass="6.921" diaginertia="0.107027 0.0980771 0.0244531"/>
         <joint type="free" armature="0" damping="0"/>
@@ -182,7 +190,150 @@
         </body>
       </body>
     </frame>
+    <frame pos="-40 -37 5.9265">
+      <body name="matt_pelvis" pos="0 0 0.96675">
+        <joint name="matt_floating_base_joint" type="free"/>
+        <geom name="matt_pelvis_collision" size="0.1563 0.02" pos="0.017597 0.008565 0.0018734" quat="0.707107 0.707107 0 0" type="capsule" friction="0.6" rgba="0.75 0.55 0.45 1" mass="12.496"/>
+        <site name="matt_imu_in_pelvis" size="0.01" group="5" rgba="1 0 0 1"/>
+        <body name="matt_left_hip_pitch_link" pos="0 0.13293 -0.036253">
+          <inertial pos="0 0 0" mass="0.1" diaginertia="0.0001 0.0001 0.0001"/>
+          <joint name="matt_left_hip_pitch_joint" range="-1.8 0.5" armature="0.05" damping="8" axis="0 1 0"/>
+          <body name="matt_left_hip_roll_link">
+            <inertial pos="0 0 0" mass="0.1" diaginertia="0.0001 0.0001 0.0001"/>
+            <joint name="matt_left_hip_roll_joint" range="-0.2 0.8" armature="0.05" damping="8" axis="1 0 0"/>
+            <body name="matt_left_hip_yaw_link">
+              <joint name="matt_left_hip_yaw_joint" range="-0.6 0.6" armature="0.03" damping="8"/>
+              <geom name="matt_left_thigh" size="0.0915 0.207067" pos="-0.0120845 0.0229605 -0.205435" quat="0.998028 0.0555518 0.0292378 0" type="capsule" friction="0.6" rgba="0.75 0.55 0.45 1" mass="8.8"/>
+              <body name="matt_left_knee_link" pos="-0.024169 0.045921 -0.41087">
+                <joint name="matt_left_knee_joint" range="0 2.4" armature="0.05" damping="8" axis="0 1 0"/>
+                <geom name="matt_left_shin" size="0.0519 0.20284" pos="-0.036253 0.008459 -0.199395" quat="0.995745 0.0209405 0.0897453 0" type="capsule" friction="0.6" rgba="0.75 0.55 0.45 1" mass="4.092"/>
+                <body name="matt_left_ankle_pitch_link" pos="-0.072506 0.016918 -0.39879">
+                  <inertial pos="0 0 0" mass="0.1" diaginertia="0.0001 0.0001 0.0001"/>
+                  <joint name="matt_left_ankle_pitch_joint" range="-0.6 0.8" armature="0.02" damping="4" axis="0 1 0"/>
+                  <body name="matt_left_ankle_roll_link">
+                    <joint name="matt_left_ankle_roll_joint" range="-0.35 0.35" armature="0.02" damping="4" axis="1 0 0"/>
+                    <geom name="matt_left_foot" size="0.1566 0.052 0.03" pos="0.088121 0.035697 -0.082571" quat="0.996309 0 0 0.0858399" type="box" friction="0.6" rgba="0.75 0.55 0.45 1" mass="1.276"/>
+                    <site name="matt_left_foot" size="0.01" pos="0.088121 0.035697 -0.092571" group="5" rgba="1 0 0 1"/>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+        <body name="matt_right_hip_pitch_link" pos="0 -0.13293 -0.036253">
+          <inertial pos="0 0 0" mass="0.1" diaginertia="0.0001 0.0001 0.0001"/>
+          <joint name="matt_right_hip_pitch_joint" range="-1.8 0.5" armature="0.05" damping="8" axis="0 1 0"/>
+          <body name="matt_right_hip_roll_link">
+            <inertial pos="0 0 0" mass="0.1" diaginertia="0.0001 0.0001 0.0001"/>
+            <joint name="matt_right_hip_roll_joint" range="-0.8 0.2" armature="0.05" damping="8" axis="1 0 0"/>
+            <body name="matt_right_hip_yaw_link">
+              <joint name="matt_right_hip_yaw_joint" range="-0.6 0.6" armature="0.03" damping="8"/>
+              <geom name="matt_right_thigh" size="0.0987 0.207067" pos="-0.0120845 -0.0229605 -0.205435" quat="0.998028 -0.0555518 0.0292378 0" type="capsule" friction="0.6" rgba="0.75 0.55 0.45 1" mass="8.8"/>
+              <body name="matt_right_knee_link" pos="-0.024169 -0.045921 -0.41087">
+                <joint name="matt_right_knee_joint" range="0 2.4" armature="0.05" damping="8" axis="0 1 0"/>
+                <geom name="matt_right_shin" size="0.0552 0.20284" pos="-0.036253 -0.008459 -0.199395" quat="0.995745 -0.0209405 0.0897453 0" type="capsule" friction="0.6" rgba="0.75 0.55 0.45 1" mass="4.092"/>
+                <body name="matt_right_ankle_pitch_link" pos="-0.072506 -0.016918 -0.39879">
+                  <inertial pos="0 0 0" mass="0.1" diaginertia="0.0001 0.0001 0.0001"/>
+                  <joint name="matt_right_ankle_pitch_joint" range="-0.6 0.8" armature="0.02" damping="4" axis="0 1 0"/>
+                  <body name="matt_right_ankle_roll_link">
+                    <joint name="matt_right_ankle_roll_joint" range="-0.35 0.35" armature="0.02" damping="4" axis="1 0 0"/>
+                    <geom name="matt_right_foot" size="0.1581 0.052 0.03" pos="0.07487 -0.025489 -0.086714" quat="0.998474 0 0 -0.0552202" type="box" friction="0.6" rgba="0.75 0.55 0.45 1" mass="1.276"/>
+                    <site name="matt_right_foot" size="0.01" pos="0.07487 -0.025489 -0.096714" group="5" rgba="1 0 0 1"/>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+        <body name="matt_waist_yaw_link" pos="-0.0048338 0 0.12084">
+          <inertial pos="0 0 0" mass="0.1" diaginertia="0.0001 0.0001 0.0001"/>
+          <joint name="matt_waist_yaw_joint" range="-0.5 0.5" armature="0.05" damping="8"/>
+          <body name="matt_waist_roll_link">
+            <inertial pos="0 0 0" mass="0.1" diaginertia="0.0001 0.0001 0.0001"/>
+            <joint name="matt_waist_roll_joint" range="-0.3 0.3" armature="0.05" damping="8" axis="1 0 0"/>
+            <body name="matt_torso_link">
+              <joint name="matt_waist_pitch_joint" range="-0.3 0.6" armature="0.05" damping="8" axis="0 1 0"/>
+              <geom name="matt_abdomen_collision" size="0.134 0.104701" pos="0.034605 -0.013409 0.1206" quat="0.707107 0.707107 0 0" type="capsule" friction="0.6" rgba="0.75 0.55 0.45 1" mass="12.232"/>
+              <geom name="matt_chest_collision" size="0.146 0.0613605" pos="0.017401 0.0112845 0.30565" quat="0.707107 0.707107 0 0" type="capsule" friction="0.6" rgba="0.75 0.55 0.45 1" mass="19.008"/>
+              <geom name="matt_neck_collision" size="0.0682 0.0573215" pos="0.0229604 0 0.52567" quat="0.160182 0 -0.987088 0" type="capsule" friction="0.6" rgba="0.75 0.55 0.45 1" mass="1.056"/>
+              <geom name="matt_head_collision" size="0.113" pos="0.068706 -0.018342 0.6806" friction="0.6" rgba="0.75 0.55 0.45 1" mass="6.072"/>
+              <site name="matt_imu_in_torso" size="0.01" pos="0.017401 0 0.30565" group="5" rgba="1 0 0 1"/>
+              <body name="matt_left_shoulder_pitch_link" pos="-0.0072506 0.22235 0.39879">
+                <inertial pos="0 0 0" mass="0.1" diaginertia="0.0001 0.0001 0.0001"/>
+                <joint name="matt_left_shoulder_pitch_joint" range="-3 0.9" armature="0.02" damping="4" axis="0 1 0"/>
+                <body name="matt_left_shoulder_roll_link">
+                  <inertial pos="0 0 0" mass="0.1" diaginertia="0.0001 0.0001 0.0001"/>
+                  <joint name="matt_left_shoulder_roll_joint" range="-0.45 2.5" armature="0.02" damping="4" axis="1 0 0"/>
+                  <body name="matt_left_shoulder_yaw_link">
+                    <joint name="matt_left_shoulder_yaw_joint" range="-1 1" armature="0.02" damping="4"/>
+                    <geom name="matt_left_upper_arm" size="0.0736 0.175943" pos="0.0424945 0.1134 -0.127635" quat="0.928825 0.346958 -0.130016 0" type="capsule" friction="0.6" rgba="0.75 0.55 0.45 1" mass="2.464"/>
+                    <body name="matt_left_elbow_link" pos="0.084989 0.2268 -0.25527">
+                      <joint name="matt_left_elbow_joint" range="-2.4 0" armature="0.02" damping="4" axis="0 1 0"/>
+                      <geom name="matt_left_forearm" size="0.0516 0.144974" pos="0.05497 0.0891 -0.100285" quat="0.919713 0.334121 -0.206135 0" type="capsule" friction="0.6" rgba="0.75 0.55 0.45 1" mass="1.408"/>
+                      <body name="matt_left_wrist_roll_link" pos="0.10994 0.1782 -0.20057">
+                        <inertial pos="0 0 0" mass="0.1" diaginertia="0.0001 0.0001 0.0001"/>
+                        <joint name="matt_left_wrist_roll_joint" range="-0.6 0.6" armature="0.01" damping="0.8" axis="1 0 0"/>
+                        <body name="matt_left_wrist_pitch_link">
+                          <inertial pos="0 0 0" mass="0.1" diaginertia="0.0001 0.0001 0.0001"/>
+                          <joint name="matt_left_wrist_pitch_joint" range="-0.6 0.6" armature="0.01" damping="0.8" axis="0 1 0"/>
+                          <body name="matt_left_wrist_yaw_link">
+                            <joint name="matt_left_wrist_yaw_joint" range="-0.6 0.6" armature="0.01" damping="0.8"/>
+                            <geom name="matt_left_hand_collision" size="0.0564 0.0793811" pos="0.024171 0.05022 -0.056525" quat="0.925222 0.341888 -0.164551 0" type="capsule" friction="0.6" rgba="0.75 0.55 0.45 1" mass="0.528"/>
+                            <site name="matt_left_palm" size="0.01" pos="0.029005 0.060263 -0.067829" group="5" rgba="1 0 0 1"/>
+                          </body>
+                        </body>
+                      </body>
+                    </body>
+                  </body>
+                </body>
+              </body>
+              <body name="matt_right_shoulder_pitch_link" pos="-0.0072506 -0.22235 0.39879">
+                <inertial pos="0 0 0" mass="0.1" diaginertia="0.0001 0.0001 0.0001"/>
+                <joint name="matt_right_shoulder_pitch_joint" range="-3 0.9" armature="0.02" damping="4" axis="0 1 0"/>
+                <body name="matt_right_shoulder_roll_link">
+                  <inertial pos="0 0 0" mass="0.1" diaginertia="0.0001 0.0001 0.0001"/>
+                  <joint name="matt_right_shoulder_roll_joint" range="-2.5 0.45" armature="0.02" damping="4" axis="1 0 0"/>
+                  <body name="matt_right_shoulder_yaw_link">
+                    <joint name="matt_right_shoulder_yaw_joint" range="-1 1" armature="0.02" damping="4"/>
+                    <geom name="matt_right_upper_arm" size="0.0703 0.155994" pos="0.023349 -0.10449 -0.11345" quat="0.92932 -0.360388 -0.0805312 0" type="capsule" friction="0.6" rgba="0.75 0.55 0.45 1" mass="2.464"/>
+                    <body name="matt_right_elbow_link" pos="0.046698 -0.20898 -0.2269">
+                      <joint name="matt_right_elbow_joint" range="-2.4 0" armature="0.02" damping="4" axis="0 1 0"/>
+                      <geom name="matt_right_forearm" size="0.0526 0.127594" pos="0.039925 -0.0821 -0.08914" quat="0.92158 -0.349099 -0.169766 0" type="capsule" friction="0.6" rgba="0.75 0.55 0.45 1" mass="1.408"/>
+                      <body name="matt_right_wrist_roll_link" pos="0.07985 -0.1642 -0.17828">
+                        <inertial pos="0 0 0" mass="0.1" diaginertia="0.0001 0.0001 0.0001"/>
+                        <joint name="matt_right_wrist_roll_joint" range="-0.6 0.6" armature="0.01" damping="0.8" axis="1 0 0"/>
+                        <body name="matt_right_wrist_pitch_link">
+                          <inertial pos="0 0 0" mass="0.1" diaginertia="0.0001 0.0001 0.0001"/>
+                          <joint name="matt_right_wrist_pitch_joint" range="-0.6 0.6" armature="0.01" damping="0.8" axis="0 1 0"/>
+                          <body name="matt_right_wrist_yaw_link">
+                            <joint name="matt_right_wrist_yaw_joint" range="-0.6 0.6" armature="0.01" damping="0.8"/>
+                            <geom name="matt_right_hand_collision" size="0.0565 0.0793814" pos="0.0177735 -0.052415 -0.056905" quat="0.926514 -0.356332 -0.120829 0" type="capsule" friction="0.6" rgba="0.75 0.55 0.45 1" mass="0.528"/>
+                            <site name="matt_right_palm" size="0.01" pos="0.021328 -0.062895 -0.068286" group="5" rgba="1 0 0 1"/>
+                          </body>
+                        </body>
+                      </body>
+                    </body>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </frame>
   </worldbody>
+
+  <contact>
+    <exclude body1="matt_left_elbow_link" body2="matt_left_wrist_yaw_link"/>
+    <exclude body1="matt_left_knee_link" body2="matt_left_ankle_roll_link"/>
+    <exclude body1="matt_pelvis" body2="matt_left_hip_yaw_link"/>
+    <exclude body1="matt_pelvis" body2="matt_right_hip_yaw_link"/>
+    <exclude body1="matt_pelvis" body2="matt_torso_link"/>
+    <exclude body1="matt_right_elbow_link" body2="matt_right_wrist_yaw_link"/>
+    <exclude body1="matt_right_knee_link" body2="matt_right_ankle_roll_link"/>
+    <exclude body1="matt_torso_link" body2="matt_left_shoulder_yaw_link"/>
+    <exclude body1="matt_torso_link" body2="matt_right_shoulder_yaw_link"/>
+  </contact>
 
   <actuator>
     <general name="blue_FL_hip" class="blue_abduction" joint="blue_FL_hip_joint"/>
@@ -197,6 +348,35 @@
     <general name="blue_RR_hip" class="blue_abduction" joint="blue_RR_hip_joint"/>
     <general name="blue_RR_thigh" class="blue_hip" joint="blue_RR_thigh_joint"/>
     <general name="blue_RR_calf" class="blue_knee" joint="blue_RR_calf_joint"/>
+    <general name="matt_left_hip_pitch_joint" joint="matt_left_hip_pitch_joint" ctrlrange="-1.8 0.5" forcelimited="true" forcerange="-250 250" biastype="affine" gainprm="300" biasprm="0 -300"/>
+    <general name="matt_left_hip_roll_joint" joint="matt_left_hip_roll_joint" ctrlrange="-0.2 0.8" forcelimited="true" forcerange="-200 200" biastype="affine" gainprm="300" biasprm="0 -300"/>
+    <general name="matt_left_hip_yaw_joint" joint="matt_left_hip_yaw_joint" ctrlrange="-0.6 0.6" forcelimited="true" forcerange="-100 100" biastype="affine" gainprm="300" biasprm="0 -300"/>
+    <general name="matt_left_knee_joint" joint="matt_left_knee_joint" ctrlrange="0 2.4" forcelimited="true" forcerange="-250 250" biastype="affine" gainprm="300" biasprm="0 -300"/>
+    <general name="matt_left_ankle_pitch_joint" joint="matt_left_ankle_pitch_joint" ctrlrange="-0.6 0.8" forcelimited="true" forcerange="-180 180" biastype="affine" gainprm="80" biasprm="0 -80"/>
+    <general name="matt_left_ankle_roll_joint" joint="matt_left_ankle_roll_joint" ctrlrange="-0.35 0.35" forcelimited="true" forcerange="-60 60" biastype="affine" gainprm="80" biasprm="0 -80"/>
+    <general name="matt_right_hip_pitch_joint" joint="matt_right_hip_pitch_joint" ctrlrange="-1.8 0.5" forcelimited="true" forcerange="-250 250" biastype="affine" gainprm="300" biasprm="0 -300"/>
+    <general name="matt_right_hip_roll_joint" joint="matt_right_hip_roll_joint" ctrlrange="-0.8 0.2" forcelimited="true" forcerange="-200 200" biastype="affine" gainprm="300" biasprm="0 -300"/>
+    <general name="matt_right_hip_yaw_joint" joint="matt_right_hip_yaw_joint" ctrlrange="-0.6 0.6" forcelimited="true" forcerange="-100 100" biastype="affine" gainprm="300" biasprm="0 -300"/>
+    <general name="matt_right_knee_joint" joint="matt_right_knee_joint" ctrlrange="0 2.4" forcelimited="true" forcerange="-250 250" biastype="affine" gainprm="300" biasprm="0 -300"/>
+    <general name="matt_right_ankle_pitch_joint" joint="matt_right_ankle_pitch_joint" ctrlrange="-0.6 0.8" forcelimited="true" forcerange="-180 180" biastype="affine" gainprm="80" biasprm="0 -80"/>
+    <general name="matt_right_ankle_roll_joint" joint="matt_right_ankle_roll_joint" ctrlrange="-0.35 0.35" forcelimited="true" forcerange="-60 60" biastype="affine" gainprm="80" biasprm="0 -80"/>
+    <general name="matt_waist_yaw_joint" joint="matt_waist_yaw_joint" ctrlrange="-0.5 0.5" forcelimited="true" forcerange="-100 100" biastype="affine" gainprm="300" biasprm="0 -300"/>
+    <general name="matt_waist_roll_joint" joint="matt_waist_roll_joint" ctrlrange="-0.3 0.3" forcelimited="true" forcerange="-150 150" biastype="affine" gainprm="300" biasprm="0 -300"/>
+    <general name="matt_waist_pitch_joint" joint="matt_waist_pitch_joint" ctrlrange="-0.3 0.6" forcelimited="true" forcerange="-200 200" biastype="affine" gainprm="300" biasprm="0 -300"/>
+    <general name="matt_left_shoulder_pitch_joint" joint="matt_left_shoulder_pitch_joint" ctrlrange="-3 0.9" forcelimited="true" forcerange="-90 90" biastype="affine" gainprm="100" biasprm="0 -100"/>
+    <general name="matt_left_shoulder_roll_joint" joint="matt_left_shoulder_roll_joint" ctrlrange="-0.45 2.5" forcelimited="true" forcerange="-80 80" biastype="affine" gainprm="100" biasprm="0 -100"/>
+    <general name="matt_left_shoulder_yaw_joint" joint="matt_left_shoulder_yaw_joint" ctrlrange="-1 1" forcelimited="true" forcerange="-50 50" biastype="affine" gainprm="100" biasprm="0 -100"/>
+    <general name="matt_left_elbow_joint" joint="matt_left_elbow_joint" ctrlrange="-2.4 0" forcelimited="true" forcerange="-70 70" biastype="affine" gainprm="80" biasprm="0 -80"/>
+    <general name="matt_left_wrist_roll_joint" joint="matt_left_wrist_roll_joint" ctrlrange="-0.6 0.6" forcelimited="true" forcerange="-10 10" biastype="affine" gainprm="8" biasprm="0 -8"/>
+    <general name="matt_left_wrist_pitch_joint" joint="matt_left_wrist_pitch_joint" ctrlrange="-0.6 0.6" forcelimited="true" forcerange="-10 10" biastype="affine" gainprm="8" biasprm="0 -8"/>
+    <general name="matt_left_wrist_yaw_joint" joint="matt_left_wrist_yaw_joint" ctrlrange="-0.6 0.6" forcelimited="true" forcerange="-10 10" biastype="affine" gainprm="8" biasprm="0 -8"/>
+    <general name="matt_right_shoulder_pitch_joint" joint="matt_right_shoulder_pitch_joint" ctrlrange="-3 0.9" forcelimited="true" forcerange="-90 90" biastype="affine" gainprm="100" biasprm="0 -100"/>
+    <general name="matt_right_shoulder_roll_joint" joint="matt_right_shoulder_roll_joint" ctrlrange="-2.5 0.45" forcelimited="true" forcerange="-80 80" biastype="affine" gainprm="100" biasprm="0 -100"/>
+    <general name="matt_right_shoulder_yaw_joint" joint="matt_right_shoulder_yaw_joint" ctrlrange="-1 1" forcelimited="true" forcerange="-50 50" biastype="affine" gainprm="100" biasprm="0 -100"/>
+    <general name="matt_right_elbow_joint" joint="matt_right_elbow_joint" ctrlrange="-2.4 0" forcelimited="true" forcerange="-70 70" biastype="affine" gainprm="80" biasprm="0 -80"/>
+    <general name="matt_right_wrist_roll_joint" joint="matt_right_wrist_roll_joint" ctrlrange="-0.6 0.6" forcelimited="true" forcerange="-10 10" biastype="affine" gainprm="8" biasprm="0 -8"/>
+    <general name="matt_right_wrist_pitch_joint" joint="matt_right_wrist_pitch_joint" ctrlrange="-0.6 0.6" forcelimited="true" forcerange="-10 10" biastype="affine" gainprm="8" biasprm="0 -8"/>
+    <general name="matt_right_wrist_yaw_joint" joint="matt_right_wrist_yaw_joint" ctrlrange="-0.6 0.6" forcelimited="true" forcerange="-10 10" biastype="affine" gainprm="8" biasprm="0 -8"/>
   </actuator>
 
   <sensor>
@@ -217,5 +397,39 @@
     <framepos objtype="site" objname="blue_FR_foot" reftype="site" refname="blue_imu" name="blue_FR_pos"/>
     <framepos objtype="site" objname="blue_RL_foot" reftype="site" refname="blue_imu" name="blue_RL_pos"/>
     <framepos objtype="site" objname="blue_RR_foot" reftype="site" refname="blue_imu" name="blue_RR_pos"/>
+    <framezaxis objtype="site" objname="matt_imu_in_torso" name="matt_upvector_torso"/>
+    <velocimeter site="matt_imu_in_torso" name="matt_local_linvel_torso"/>
+    <velocimeter site="matt_imu_in_pelvis" name="matt_local_linvel_pelvis"/>
+    <accelerometer site="matt_imu_in_torso" name="matt_accelerometer_torso"/>
+    <accelerometer site="matt_imu_in_pelvis" name="matt_accelerometer_pelvis"/>
+    <gyro site="matt_imu_in_torso" name="matt_gyro_torso"/>
+    <gyro site="matt_imu_in_pelvis" name="matt_gyro_pelvis"/>
+    <framezaxis objtype="site" objname="matt_imu_in_pelvis" name="matt_upvector_pelvis"/>
+    <framexaxis objtype="site" objname="matt_imu_in_torso" name="matt_forwardvector_torso"/>
+    <framexaxis objtype="site" objname="matt_imu_in_pelvis" name="matt_forwardvector_pelvis"/>
+    <framequat objtype="site" objname="matt_imu_in_torso" name="matt_orientation_torso"/>
+    <framequat objtype="site" objname="matt_imu_in_pelvis" name="matt_orientation_pelvis"/>
+    <framelinvel objtype="site" objname="matt_imu_in_torso" name="matt_global_linvel_torso"/>
+    <framelinvel objtype="site" objname="matt_imu_in_pelvis" name="matt_global_linvel_pelvis"/>
+    <frameangvel objtype="site" objname="matt_imu_in_torso" name="matt_global_angvel_torso"/>
+    <frameangvel objtype="site" objname="matt_imu_in_pelvis" name="matt_global_angvel_pelvis"/>
+    <framelinvel objtype="site" objname="matt_left_foot" name="matt_left_foot_global_linvel"/>
+    <framelinvel objtype="site" objname="matt_right_foot" name="matt_right_foot_global_linvel"/>
+    <framezaxis objtype="site" objname="matt_left_foot" name="matt_left_foot_upvector"/>
+    <framezaxis objtype="site" objname="matt_right_foot" name="matt_right_foot_upvector"/>
+    <force site="matt_left_foot" name="matt_left_foot_force"/>
+    <force site="matt_right_foot" name="matt_right_foot_force"/>
+    <contact geom1="matt_left_foot" geom2="floor" reduce="mindist" name="matt_left_foot_floor_found"/>
+    <contact geom1="matt_right_foot" geom2="floor" reduce="mindist" name="matt_right_foot_floor_found"/>
+    <contact geom1="matt_right_foot" geom2="matt_left_foot" reduce="mindist" name="matt_right_foot_left_foot_found"/>
+    <contact geom1="matt_left_foot" geom2="matt_right_shin" reduce="mindist" name="matt_left_foot_right_shin_found"/>
+    <contact geom1="matt_right_foot" geom2="matt_left_shin" reduce="mindist" name="matt_right_foot_left_shin_found"/>
+    <contact geom1="matt_left_hand_collision" geom2="matt_left_thigh" reduce="mindist" name="matt_left_hand_left_thigh_found"/>
+    <contact geom1="matt_right_hand_collision" geom2="matt_right_thigh" reduce="mindist" name="matt_right_hand_right_thigh_found"/>
   </sensor>
+
+  <keyframe>
+    <key name="matt_home" qpos="-40 -40 5.715 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.9636 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -0.3 0 -0.15 0 0 0 0 0.3 0 -0.15 0 0 0" ctrl="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -0.3 0 -0.15 0 0 0 0 0.3 0 -0.15 0 0 0"/>
+    <key name="matt_knees_bent" qpos="-40 -40 5.715 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.9265 1 0 0 0 -0.25 0 0 0.5 -0.25 0 -0.25 0 0 0.5 -0.25 0 0 0 0 0 -0.3 0 -0.3 0 0 0 0 0.3 0 -0.3 0 0 0" ctrl="0 0 0 0 0 0 0 0 0 0 0 0 -0.25 0 0 0.5 -0.25 0 -0.25 0 0 0.5 -0.25 0 0 0 0 0 -0.3 0 -0.3 0 0 0 0 0.3 0 -0.3 0 0 0"/>
+  </keyframe>
 </mujoco>

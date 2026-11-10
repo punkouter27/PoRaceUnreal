@@ -32,6 +32,8 @@ class Entry:
   cruise: float
   max_yaw: float
   uses_unstick: bool
+  holds_heading: bool = False   # steer to the track heading during the countdown (a brain that drifts on a zero command)
+  impratio: float = 100.0       # the impratio its brain was trained at (the race runs at the grid's lowest)
   lane: float = 0.0
   speed: float = 0.0
   aggression: float = 0.0
@@ -69,6 +71,7 @@ class Race:
   finished: int = 0
   flips: int = 0
   events: list = field(default_factory=list)
+  parked: list = field(default_factory=list)   # racers of the track model not on the grid: held still off the track
 
   def __post_init__(self):
     self.laps = min(max(self.laps if self.laps > 0 else self.track.default_laps, 1), 5) if self.track.closed else 1
@@ -77,7 +80,9 @@ class Race:
 
   # --- grid ----------------------------------------------------------------------------------------------------------
   def draw(self):
-    """Lanes and speeds for this race, from the seed; then every racer on its grid slot."""
+    """The grid's impratio, lanes and speeds for this race (from the seed), every racer on its grid slot, the rest parked."""
+    m = self.entries[0].racer.m
+    m.opt.impratio = min(e.impratio for e in self.entries)
     rng = SplitMix64(self.seed)
     lanes = self.track.lane_offsets(len(self.entries))
     if self.randomize_grid:
@@ -89,6 +94,21 @@ class Race:
       e.aggression = rng.uniform()
       self.spawn(e, 0.0)
       e.racer.reset_to_spawn()
+    x0 = min(p[0] for p in self.track.points) - 40.0
+    y0 = min(p[1] for p in self.track.points) - 40.0
+    for k, r in enumerate(self.parked):
+      r.spawn = (x0, y0 + 3.0 * k, r.home_height + 5.0)
+      r.spawn_yaw = 0.0
+      r.reset_to_spawn()
+
+  def hold_parked(self):
+    """Parked racers float still 5 m above the floor, 40 m off the track: never a contact, never a brain."""
+    for r in self.parked:
+      d = r.d
+      x, y, z = r.spawn
+      d.qpos[r.root_q:r.root_q + 7] = [x, y, z, 1.0, 0.0, 0.0, 0.0]
+      d.qvel[r.root_v:r.root_v + 6] = 0
+      d.qvel[r.vadr] = 0
 
   def spawn(self, e, s):
     """Where a reset puts this racer: its lane at arc length s, facing along the track."""
@@ -147,6 +167,7 @@ class Race:
       self.leader().racer.knock_over()
       self.flips += 1
 
+    self.hold_parked()
     for e in self.entries:
       r = e.racer
       was = e.state
@@ -158,6 +179,11 @@ class Race:
           e.down = True
         if e.state == RACING and e.down:
           e.down = False
+      if self.phase == COUNTDOWN and e.holds_heading:
+        _, t0 = self.track.point_at(0.0)
+        e0 = math.remainder(math.atan2(t0[1], t0[0]) - r.yaw(), 2.0 * math.pi)
+        r.target[:] = (0.0, 0.0, min(max(STEER_GAIN * e0, -e.max_yaw), e.max_yaw))
+        continue
       if self.phase != RACING_PHASE or e.finish_time >= 0:
         r.target[:] = 0
         continue

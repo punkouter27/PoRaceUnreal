@@ -12,6 +12,9 @@ void FRaceRules::Setup(const mjModel* m, mjData* d, int32 RequestedLaps)
 	RaceStart = -1;
 	Finished = Flips = 0;
 	mj_resetData(m, d);	// a fresh start, as race.py's fresh MjData
+	ImpRatio = Entries.Num() ? Entries[0].ImpRatio : 100.0;
+	for (const FRaceEntry& E : Entries) ImpRatio = std::min(ImpRatio, E.ImpRatio);
+	const_cast<mjModel*>(m)->opt.impratio = ImpRatio;	// the grid's lowest (racelib/race.py draw)
 
 	FRaceRng Rng(Seed);
 	TArray<double> Lanes = Track.LaneOffsets(Entries.Num());
@@ -27,7 +30,23 @@ void FRaceRules::Setup(const mjModel* m, mjData* d, int32 RequestedLaps)
 		Spawn(E, 0.0);
 		E.Racer->ResetToSpawn(m, d);
 	}
+	double X0 = Track.Points[0].X, Y0 = Track.Points[0].Y;
+	for (const FVector2D& P : Track.Points) { X0 = std::min(X0, P.X); Y0 = std::min(Y0, P.Y); }
+	for (int32 k = 0; k < Parked.Num(); ++k)
+	{
+		FRacer& R = *Parked[k];
+		R.Spawn[0] = X0 - 40.0;
+		R.Spawn[1] = Y0 - 40.0 + 3.0 * k;
+		R.Spawn[2] = R.HomeHeight + 5.0;
+		R.SpawnYaw = 0.0;
+		R.ResetToSpawn(m, d);
+	}
 	mj_forward(m, d);
+}
+
+void FRaceRules::HoldParked(mjData* d) const
+{
+	for (const FRacer* R : Parked) R->Hold(d);
 }
 
 void FRaceRules::Spawn(FRaceEntry& E, double S) const
@@ -99,9 +118,10 @@ void FRaceRules::PreStep(const mjModel* m, mjData* d)
 		++Flips;
 	}
 
+	HoldParked(d);
 	for (FRaceEntry& E : Entries)
 	{
-		FGo2Racer& R = *E.Racer;
+		FRacer& R = *E.Racer;
 		const ERacerState Was = E.State;
 		R.UpdateState(m, d);
 		E.State = R.State;
@@ -109,6 +129,16 @@ void FRaceRules::PreStep(const mjModel* m, mjData* d)
 		{
 			if (E.State == ERacerState::Fallen && Was != ERacerState::Fallen) { ++E.Falls; E.bDown = true; }
 			if (E.State == ERacerState::Racing && E.bDown) E.bDown = false;
+		}
+		if (Phase == ERacePhase::Countdown && E.bHoldsHeading)
+		{
+			FVector2D T0;
+			Track.PointAt(0.0, T0);
+			const double E0 = std::remainder(std::atan2(T0.Y, T0.X) - R.Yaw(d), 2.0 * 3.14159265358979323846);
+			R.Target[0] = 0.0;
+			R.Target[1] = 0.0;
+			R.Target[2] = std::min(std::max(SteerGain * E0, -E.MaxYaw), E.MaxYaw);
+			continue;
 		}
 		if (Phase != ERacePhase::Racing || E.FinishTime >= 0.0)
 		{
@@ -140,7 +170,7 @@ void FRaceRules::PreStep(const mjModel* m, mjData* d)
 		const double Err = std::remainder(std::atan2(Tp.Y - Pos.Y, Tp.X - Pos.X) - R.Yaw(d), 2.0 * 3.14159265358979323846);
 		const double YawRate = std::min(std::max(SteerGain * Err, -E.MaxYaw), E.MaxYaw);
 		double Vx = E.Speed * std::max(0.3, std::cos(Err)), Vy = 0.0;
-		const bool bStuck = E.bUsesUnstick && R.Locomoting() && (double)R.Cmd[0] > 1.0 && R.PlanarSpeed2(d) < StuckSpeed * StuckSpeed;
+		const bool bStuck = E.bUsesUnstick && R.Locomoting() && R.CmdX() > 1.0 && R.PlanarSpeed2(d) < StuckSpeed * StuckSpeed;
 		E.StuckSteps = bStuck ? E.StuckSteps + 1 : 0;
 		if (E.StuckSteps > StuckSteps)
 		{

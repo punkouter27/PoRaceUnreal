@@ -23,7 +23,16 @@ from go2.sim import DEFAULT, Go2Sim, Q, V, brain  # noqa: E402
 
 PARITY = C.ROOT_PATH.parent / "docs" / "parity"
 SEEDS = 10
+IMPRATIO = None   # --impratio: run the checks at another impratio (a race with a human runs at 1)
 rows, failed = [], []
+
+
+def make_sim():
+  sim = Go2Sim()
+  if IMPRATIO is not None:
+    sim.m.opt.impratio = IMPRATIO
+    sim.reset()
+  return sim
 
 
 def row(group, name, ok, note, gate=True):
@@ -55,7 +64,7 @@ def analyse(sim, frames):
 def recorded(ref_name, brain_name):
   ref = json.loads((PARITY / f"{ref_name}.json").read_text())
   frames = ref["frames"]
-  sim = Go2Sim()
+  sim = make_sim()
 
   # Open loop: the recorded ctrl, no brain. Drift here is the physics change between versions and nothing else.
   sim.reset()
@@ -95,7 +104,7 @@ def perturbed(sim, rng):
 
 
 def rung_track(name, brain_name, commands, seconds, tol, need):
-  sim, policy, rng = Go2Sim(), brain(brain_name), np.random.default_rng(0)
+  sim, policy, rng = make_sim(), brain(brain_name), np.random.default_rng(0)
   passes, worst, speeds = 0, 0.0, []
   for seed in range(SEEDS):
     cmd = np.array(commands[seed % len(commands)], np.float32)
@@ -114,7 +123,7 @@ def rung_track(name, brain_name, commands, seconds, tol, need):
 
 
 def rung_getup():
-  sim, policy, rng = Go2Sim(), brain("go2_getup"), np.random.default_rng(1)
+  sim, policy, rng = make_sim(), brain("go2_getup"), np.random.default_rng(1)
   passes, times = 0, []
   for _ in range(SEEDS):
     sim.reset()
@@ -139,6 +148,9 @@ def rung_getup():
 
 
 def main():
+  global IMPRATIO
+  if "--impratio" in sys.argv:
+    IMPRATIO = float(sys.argv[sys.argv.index("--impratio") + 1])
   recorded("reference_trajectory", "go2_loco")
   recorded("reference_fast", "go2_loco_fast")
   recorded("reference_steeple", "go2_loco_steeple")
@@ -149,10 +161,10 @@ def main():
   rung_track("speed go2_loco_fast", "go2_loco_fast", [[2.0, 0, 0], [2.5, 0, 0]], 10, 0.5, 9)
   rung_getup()
   w = max(len(r["name"]) for r in rows)
-  print(f"MuJoCo {mujoco.__version__}")
+  print(f"MuJoCo {mujoco.__version__}" + (f", impratio {IMPRATIO}" if IMPRATIO is not None else ""))
   for r in rows:
     print(f"{r['group']:6} {r['name']:{w}}  {'OK  ' if r['ok'] else ('FAIL' if r['gate'] else 'diff')}  {r['note']}")
-  (PARITY / f"version_check_{mujoco.__version__}.json").write_text(json.dumps({"mujoco": mujoco.__version__, "rows": rows}, indent=1) + "\n")
+  (PARITY / f"version_check_{mujoco.__version__}{'' if IMPRATIO is None else f'_impratio{IMPRATIO:g}'}.json").write_text(json.dumps({"mujoco": mujoco.__version__, "rows": rows}, indent=1) + "\n")
   print("\nRESULT", "PASS" if not failed else f"FAIL: {failed}")
   return 1 if failed else 0
 
