@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PoRace UI Round 3</title>
+<style>
+:root{--bg:#f6f7f9;--fg:#1c2230;--muted:#5d6678;--card:#fff;--line:#dfe3ea;--acc:#1f7a4d;--warn:#b3541e}
+@media (prefers-color-scheme:dark){:root{--bg:#14171d;--fg:#e6e9ef;--muted:#9aa3b2;--card:#1c2028;--line:#2b313c;--acc:#4cc38a;--warn:#e08a55}}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:1100px;margin:0 auto;padding:24px 16px}
+h1{font-size:24px;margin:0 0 4px}h2{font-size:18px;margin:32px 0 8px}
+p,li{color:var(--muted)} b{color:var(--fg)}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media (max-width:700px){.pair{grid-template-columns:1fr}}
+figure{margin:0;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px}
+figure img{width:100%;height:auto;display:block;border-radius:4px}
+figcaption{font-size:13px;margin-top:8px;color:var(--muted)}
+.tag{display:inline-block;font-size:12px;font-weight:600;padding:1px 8px;border-radius:10px;border:1px solid var(--line);margin-right:6px}
+.after .tag{color:var(--acc);border-color:var(--acc)} .before .tag{color:var(--warn);border-color:var(--warn)}
+table{border-collapse:collapse;width:100%;font-size:14px;background:var(--card)}
+td,th{border:1px solid var(--line);padding:6px 8px;text-align:left;vertical-align:top}
+</style></head>
+<body><main>
+<h1>PoRace UI, round 3 (C1–C5, A2, A3)</h1>
+<p>Build 261109, Windows player, portrait 540×960 (9:16), Flat Oval seed 3, Blue and Matt (one-dog roster). "Before" is the round-2 build (Build/Baseline) on the same seed, captured at the same moments.</p>
+
+<h2>Race HUD, 14 s into the race</h2>
+<div class="pair">
+<figure class="before"><img src="r3_before/shot_01_14s.png" alt="Race HUD before"><figcaption><span class="tag">Before</span>
+TL "PoRace Go2" on every map · TC a two-line debug readout (control step, inference ms, raw velocity and command), always on, and under the 11 pt minimum · TR "Locomotion / RACING" plus Flip, II and Menu in three sizes · BL a lone Restart button.</figcaption></figure>
+<figure class="after"><img src="r3_after/shot_01_14s.png" alt="Race HUD after"><figcaption><span class="tag">After</span>
+<b>TL</b> map and lap ("Flat Oval Lap 1/2") over the standings chips · <b>TC</b> "30 fps | 250 Hz" only, TAB brings the debug line back · <b>TR</b> one settings button (Resume, Replay, Restart, Menu, Flip leader, Graphics) · <b>BL</b> agent telemetry for the racer on camera: state, speed, stride rate and length, power, effort and fall-risk bars, with the camera label on top · <b>BR</b> the build watermark alone.</figcaption></figure>
+</div>
+
+<h2>Start and late race</h2>
+<div class="pair">
+<figure class="before"><img src="r3_before/shot_00_6s.png" alt="Before at 6 s"><figcaption><span class="tag">Before</span>6 s</figcaption></figure>
+<figure class="after"><img src="r3_after/shot_00_6s.png" alt="After at 6 s"><figcaption><span class="tag">After</span>6 s</figcaption></figure>
+<figure class="before"><img src="r3_before/shot_02_24s.png" alt="Before at 24 s"><figcaption><span class="tag">Before</span>24 s</figcaption></figure>
+<figure class="after"><img src="r3_after/shot_02_24s.png" alt="After at 24 s"><figcaption><span class="tag">After</span>24 s</figcaption></figure>
+</div>
+
+<h2>What changed</h2>
+<table>
+<tr><th>Corner</th><th>Before</th><th>After</th></tr>
+<tr><td>Top left</td><td>"PoRace Go2" (same on every map)</td><td>Map name and lap</td></tr>
+<tr><td>Top centre</td><td>Debug line, 2 rows, 8 pt</td><td>fps and sim rate, 11 pt; TAB for the debug line</td></tr>
+<tr><td>Top right</td><td>Mode text, Flip, II, Menu</td><td>One settings button; the sheet gained Flip leader and Graphics (Auto / Ultra / High)</td></tr>
+<tr><td>Bottom left</td><td>Restart</td><td>Agent telemetry block (moved Restart into the sheet)</td></tr>
+<tr><td>Bottom right</td><td>Watermark</td><td>Watermark (unchanged)</td></tr>
+<tr><td>On events</td><td>–</td><td>Yellow strip and "YELLOW FLAG" under the clock when 2+ racers are down; "is wobbling!" ticker and an early incident cut when a racer is about to fall</td></tr>
+</table>
+<p>Text-scale check (ShotProbe, three reference phones): before 1 label under 11 pt in every shot, after 0. After the capture, the telemetry's "steps/s" became <b>strides/s</b> and "m/step" became <b>m stride</b> (a dog's four feet counted as one stride), so the after image still shows the old wording; the next capture will show the new.</p>
+</main></body></html>

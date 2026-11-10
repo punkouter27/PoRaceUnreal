@@ -1,0 +1,78 @@
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Text;
+using Mujoco;
+using UnityEngine;
+
+namespace PoRace {
+
+/// <summary>Records canonical-order qpos/qvel/ctrl plus obs/action every control step for `seconds`, then writes
+/// docs/parity/<fileName>. training/zero_brain.py and training/compare_trajectory.py read it.</summary>
+public unsafe class ParityRecorder : MonoBehaviour {
+  public MonoBehaviour controller;   // any IParitySource (Go2Controller, G1Controller)
+  public float seconds = 2f;
+  public string fileName = "unity_zero_brain.json";
+  public bool quitWhenDone = false;
+
+  readonly List<string> _frames = new();
+  double[] _qpos, _qvel, _ctrl;
+  int _physicsStep;
+  bool _done;
+
+  void Awake() {
+    // -seconds S  -parityFile name.json  -parityDir <abs dir>
+    if (CliArgs.TryFloat("-seconds", out float s)) seconds = s;
+    if (CliArgs.TryString("-parityFile", out var pf)) fileName = pf;
+    MjScene.Instance.postUpdateEvent += OnPostStep;
+  }
+  void OnDestroy() { if (MjScene.InstanceExists) MjScene.Instance.postUpdateEvent -= OnPostStep; }
+
+  void OnPostStep(object sender, MjStepArgs a) {
+    var src = controller as IParitySource;
+    if (_done || seconds <= 0f || src == null || !src.Ready) return;  // -seconds 0 = viewer mode, no recording
+    // Record after the last physics step of each control interval, like the trainer.
+    if (_physicsStep++ % src.Decimation != src.Decimation - 1) return;
+    var d = a.data;
+    if (_qpos == null) { _qpos = new double[src.Nq]; _qvel = new double[src.Nv]; _ctrl = new double[src.Nu]; }
+    src.Canonical(d, _qpos, _qvel, _ctrl);
+    var sb = new StringBuilder();
+    sb.Append("{\"t\":").Append(d->time.ToString("R", CultureInfo.InvariantCulture));
+    Append(sb, "qpos", _qpos); Append(sb, "qvel", _qvel); Append(sb, "ctrl", _ctrl);
+    Append(sb, "obs", src.CurrentObs); Append(sb, "action", src.LastAction);
+    sb.Append('}');
+    _frames.Add(sb.ToString());
+    if (d->time >= seconds) Finish();
+  }
+
+  static void Append(StringBuilder sb, string key, double[] v) {
+    sb.Append(",\"").Append(key).Append("\":[");
+    for (int i = 0; i < v.Length; i++) { if (i > 0) sb.Append(','); sb.Append(v[i].ToString("R", CultureInfo.InvariantCulture)); }
+    sb.Append(']');
+  }
+
+  static void Append(StringBuilder sb, string key, float[] v) {
+    sb.Append(",\"").Append(key).Append("\":[");
+    for (int i = 0; i < v.Length; i++) { if (i > 0) sb.Append(','); sb.Append(v[i].ToString("R", CultureInfo.InvariantCulture)); }
+    sb.Append(']');
+  }
+
+  void Finish() {
+    _done = true;
+    var dir = Path.Combine(Application.dataPath, "..", "docs", "parity");
+    if (CliArgs.TryString("-parityDir", out var pd)) dir = pd;   // headless player: -parityDir <abs path>
+    Directory.CreateDirectory(dir);
+    var path = Path.GetFullPath(Path.Combine(dir, fileName));
+    File.WriteAllText(path, "{\"frames\":[\n" + string.Join(",\n", _frames) + "\n]}");
+    Debug.Log($"[ParityRecorder] wrote {_frames.Count} frames to {path}");
+    if (quitWhenDone) {
+#if UNITY_EDITOR
+      UnityEditor.EditorApplication.isPlaying = false;
+#else
+      Application.Quit();
+#endif
+    }
+  }
+}
+
+}

@@ -1,0 +1,23 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 74d0090ce7037f94baae4fd85f50e4b3, type: 3}
+  m_Name: Creature03_Grandma
+  m_EditorClassIdentifier: PoRace::PoRace.CreatureDefinition
+  displayName: Grandma
+  body: 1
+  height: 1.58
+  raceable: 0
+  blockedBy: 'In training: her own policy (from scratch) has not graduated yet.'
+  visualPrefab: {fileID: 4081923019180588709, guid: d4e0bd472840a7d4a8fd12fde11cbd81, type: 3}
+  color: {r: 0.85, g: 0.45, b: 0.95, a: 1}
+  cameraHeight: 1
+  traits: Unhurried (to 1.3 m/s), short quick steps (1.05 Hz stride clock), careful low foot clearance, steady torso, saves her strength (low motor-heat budget). Learned from her card in training/grandma/env.py.

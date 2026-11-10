@@ -1,0 +1,78 @@
+{
+ "id": "planar_sprint",
+ "unityName": "Map01_PlanarSprint",
+ "displayName": "Planar Sprint",
+ "sceneName": "Track01x4",
+ "terrain": "flat",
+ "difficulty": 1,
+ "closed": 0,
+ "defaultLaps": 1,
+ "halfWidth": 1.65,
+ "gridSlots": 4,
+ "laneSpacing": 0.8,
+ "checkpointSpacing": 25,
+ "lookAhead": 4,
+ "centerline": [
+  {
+   "x": 0,
+   "y": 0
+  },
+  {
+   "x": 100,
+   "y": 0
+  }
+ ],
+ "laneScale": [
+  {
+   "t": 0,
+   "v": 1,
+   "in": 0,
+   "out": 0
+  },
+  {
+   "t": 0.15,
+   "v": 1,
+   "in": 0,
+   "out": 0
+  },
+  {
+   "t": 0.4,
+   "v": 0,
+   "in": 0,
+   "out": 0
+  },
+  {
+   "t": 0.6,
+   "v": 0,
+   "in": 0,
+   "out": 0
+  },
+  {
+   "t": 0.85,
+   "v": 1,
+   "in": 0,
+   "out": 0
+  },
+  {
+   "t": 1,
+   "v": 1,
+   "in": 0,
+   "out": 0
+  }
+ ],
+ "bankDeg": [
+  {
+   "t": 0,
+   "v": 0,
+   "in": 0,
+   "out": 0
+  },
+  {
+   "t": 1,
+   "v": 0,
+   "in": 0,
+   "out": 0
+  }
+ ],
+ "obstacles": []
+}

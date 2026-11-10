@@ -1,0 +1,17 @@
+{
+ "creature": "grandma_porace",
+ "physics": "5e79c99044f02ace",
+ "interface": "265293b4b0b21c42",
+ "obs_size": 103,
+ "act_size": 29,
+ "ctrl_dt": 0.02,
+ "sim_dt": 0.004,
+ "nq": 36,
+ "nv": 35,
+ "nu": 29,
+ "clock": {
+  "gait_hz_slope": 0.2,
+  "gait_hz_v0": 0.9
+ },
+ "problems": []
+}

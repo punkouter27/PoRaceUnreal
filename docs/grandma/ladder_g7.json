@@ -1,0 +1,32 @@
+{
+ "toddler/stand 10 s": {
+  "passes": 0,
+  "need": 10,
+  "err": 0.1039,
+  "sym": 0.0,
+  "nonfoot": 405.7,
+  "jerk": 0.0126,
+  "force": 1.5245,
+  "hf": 0.012
+ },
+ "toddler/push standing": {
+  "passes": 0,
+  "need": 9,
+  "err": 0.1942,
+  "sym": 0.0,
+  "nonfoot": 193.5,
+  "jerk": 0.0212,
+  "force": 3.6374,
+  "hf": 0.016
+ },
+ "toddler/push walking": {
+  "passes": 10,
+  "need": 9,
+  "err": 0.4503,
+  "sym": 0.0234,
+  "nonfoot": 0.0,
+  "jerk": 0.042,
+  "force": 2.2766,
+  "hf": 0.0434
+ }
+}

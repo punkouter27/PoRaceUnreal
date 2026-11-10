@@ -1,0 +1,162 @@
+{
+ "title": "8-Hour Multi-Agent RL Optimization Report",
+ "subtitle": "8-hour unattended RL session, 2026-11-09 21:25 → 2026-11-10 04:45 UTC (training) · one RTX 2060 · MuJoCo Warp + Brax PPO · porace-3a",
+ "agents": [
+  {
+   "name": "Grandma (Urgent Priority #1)",
+   "state": "graduated",
+   "tone": "good",
+   "headline": "Graduated: 94/100",
+   "detail": "From falling over in 0.07 s to passing the race graduation test (94/100; 91/100 on fresh seeds) with the toddler tier 10/10 ×3 at Matt's smoothness. Exported <code>training/final/grandma_g14.onnx</code> (not deployed to the game yet: Unity parity and your go first). Child tier still fails on gait symmetry: her scanned skeleton is asymmetric."
+  },
+  {
+   "name": "Matt (Human Racer · Priority #2)",
+   "state": "98/100 graduated · shipped",
+   "tone": "good",
+   "headline": "m20 Production (98/100) · m25 Jog Tested",
+   "detail": "Production weights <code>final/matt_m20_params.pkl</code> + <code>Assets/Policies/matt_loco.onnx</code> pass every gate: Toddler 10/10 ×3, Child 10/10 (err 0.126 m/s, symmetry 0.017, foot force 2.04 BW), Adult Turn 10/10, Graduation <b>98/100</b> (96/100 on fresh seeds 100–199). Run <b>m25</b> (202M steps, speed-scaled gait clock v2 up to 2.8 m/s) reached 95/100 graduation and 10/10 ×3 Toddler, confirming a flight-phase reward is required for 2.5 m/s jogging; <b>m20 remains the shipped production policy</b>."
+  },
+  {
+   "name": "Dog / Go2 (Quadruped · Priority #3)",
+   "state": "100% graduated · shipped",
+   "tone": "good",
+   "headline": "All 4 Skill Policies Shipped & Verified",
+   "detail": "Production weights saved in <code>training/final/</code> and deployed to <code>Assets/Policies/</code>: <code>go2_loco</code> (R0/R1/R2 10/10), <code>go2_getup</code> (R3 stand-up 20/20 trainer, 10/10 Unity), <code>go2_fast</code> (2.5 m/s sprint + 17° banked turns), and <code>go2_steeple</code> (91.6% across 500 obstacle seeds). Races every flat, banked, and steeplechase track."
+  }
+ ],
+ "story": [
+  "<b>m25 tested speed-scaled stride frequency on Matt (202M steps).</b> Raising stride frequency +0.2 Hz per m/s above 1.2 m/s held 95/100 race graduation and 10/10 ×3 Toddler, but 2.5 m/s jogging still lacked an aerial flight phase. Kept <code>matt_m20</code> (98/100) as production.",
+  "<b>g1 learned to fall over at once (0–202M).</b> For an untrained body every second alive cost −0.44 reward/step while falling cost −2 once, so ending the episode in 3.7 steps (0.07 s) was the mathematical optimum.",
+  "<b>g2 learned to sit on the floor (0–32M).</b> Flooring step reward at zero stopped early suicide, but stock termination only checked for an upside-down torso, so sitting upright on the floor scored 978/1000 steps with 0 foot force.",
+  "<b>g3 stood and passed Toddler 10/10 ×3, but stomped at 20× body weight (0–64M).</b> Adding a pelvis fall-height termination (0.54 m) forced her to stand, passing Toddler at 42.6M, but the reward floor hid the penalty of 20 BW foot impacts.",
+  "<b>g4 stomped harder (76 BW); g5 became smooth (0.73 BW) but kneeled.</b> Restoring full contact-force penalty and adding action-rate smoothing (−0.1) in g5 eliminated stomping immediately (jerk 0.009), but she discovered kneeling on one knee/hand above 0.54 m.",
+  "<b>g6–g7 stood cleanly like Matt (77M–332M lineage).</b> Adding low-body height termination (knees/elbows/wrists/torso > 0.15 m) closed the kneeling exploit. She stood 10/10 at 1.04 BW and survived walking shoves 10/10, while PPO policy/value/entropy loss logging was enabled.",
+  "<b>g8 collapsed on an abrupt alive-bonus cut; g9 stabilized at lr 1e-4.</b> Cutting alive 15 → 3 in one jump shocked the value critic; stepping alive 15 → 8 at lr 1e-4 in g9 restored 9/10 standing and 10/10 walking-push recovery, but she stood still (0.02 m/s) when commanded to walk.",
+  "<b>g10 unlocked walking (0.02 → 0.50 m/s) and first graduation passes.</b> Boosting wide linear-velocity tracking 1 → 4 and easing alive 8 → 5 broke the standing local optimum, cutting walking velocity error from 0.49 → 0.20 m/s.",
+  "<b>g12–g13 closed in on graduation.</b> She passes the toddler tier every time now, and graduation climbed 27 → 52 → 71 → 84 of 100 episodes. The child tier is held back by a limp that comes from her skeleton: the scan rig's left and right legs differ (thigh 29.2 vs 27.6 cm).",
+  "<b>g14 graduated.</b> A gentle fine-tune (half the learning rate) of g13's best checkpoint passed the race graduation test: 94/100 episodes, and 91/100 on fresh seeds. Her policy was exported to ONNX."
+ ],
+ "runs": {
+  "g1": "fell at once",
+  "g2": "sat down",
+  "g3": "stood, stomped (20 BW)",
+  "g4": "stomped harder (76 BW)",
+  "g5": "smooth (0.7 BW), kneeled",
+  "g6": "stood 10/10 cleanly",
+  "g7": "stood + walk shoves 10/10",
+  "g8": "critic collapsed",
+  "g9": "stable, stood still",
+  "g10": "walked 0.5 m/s",
+  "g11": "Toddler 10/10 ×3 · grad 27%",
+  "g12": "stronger symmetry",
+  "g13": "last run",
+  "g14": "graduated 94/100",
+  "g15": "foot-force softening (<3.0 BW)",
+  "g16": "brisk 1.35 m/s & yaw tracking",
+  "g17": "8° banked/slope robustness"
+ },
+ "table": [
+  {
+   "run": "g1",
+   "start": "scratch",
+   "change": "her launch recipe (other session)",
+   "result": "falls at once: episode 260 → 3.7 steps"
+  },
+  {
+   "run": "g2",
+   "start": "scratch",
+   "change": "+ reward floor (living reward ≥ 0)",
+   "result": "sits on the floor: toddler 0/10"
+  },
+  {
+   "run": "g3",
+   "start": "scratch",
+   "change": "+ end episode when pelvis < 0.54 m",
+   "result": "<b>first toddler pass</b> (43M) but stomps at 20× body weight"
+  },
+  {
+   "run": "g4",
+   "start": "g3 @ 43M",
+   "change": "contact cost ÷10, alive 5",
+   "result": "stomps harder (76×), stand 2/10"
+  },
+  {
+   "run": "g5",
+   "start": "g3 @ 43M",
+   "change": "full contact cost, no floor, alive 15, action-rate −0.1",
+   "result": "smooth (1 BW, jerk 0.009) but kneels"
+  },
+  {
+   "run": "g6",
+   "start": "g5",
+   "change": "+ end episode when a knee / elbow / wrist / torso nears the floor",
+   "result": "stands 10/10 like Matt; pushes 4–6/10"
+  },
+  {
+   "run": "g7",
+   "start": "g6",
+   "change": "same; PPO losses logged",
+   "result": "stand 10, push walking 10 at 48M; later regressed"
+  },
+  {
+   "run": "g8",
+   "start": "g7 @ 48M",
+   "change": "alive 15 → 3",
+   "result": "collapsed (episode 431 → 79)"
+  },
+  {
+   "run": "g9",
+   "start": "g7 @ 48M",
+   "change": "alive 8, learning rate 1e-4",
+   "result": "stable, but stands still when told to walk (0.02 m/s)"
+  },
+  {
+   "run": "g10",
+   "start": "g9 @ 38M",
+   "change": "wide speed tracking ×4, alive 5",
+   "result": "<b>walks</b> (0.5 m/s); graduation 2/100; can't hold still"
+  },
+  {
+   "run": "g11",
+   "start": "g10",
+   "change": "stand-still pose cost −2 → −0.5",
+   "result": "<b>toddler tier 10/10 ×3</b>; graduation 27/100"
+  },
+  {
+   "run": "g12",
+   "start": "g11",
+   "change": "gait symmetry ×3",
+   "result": "graduation 52 → <b>71/100</b>"
+  },
+  {
+   "run": "g13",
+   "start": "g12",
+   "change": "same, last run",
+   "result": "graduation <b>84/100</b> at 24M (gate 90)"
+  },
+  {
+   "run": "g14",
+   "start": "g13 @ 24M",
+   "change": "learning rate 1e-4 → 5e-5 (fine-tune)",
+   "result": "<b>graduation 94/100</b> (fresh seeds 91/100), toddler 10/10 ×3 · exported ONNX"
+  }
+ ],
+ "glossary": {
+  "Episode": "One training attempt, up to 1000 control steps (20 s at 50 Hz). It ends early when the agent falls or touches a knee/elbow/hand to the floor.",
+  "Eval reward": "Total score of an evaluation episode across 128 parallel test worlds. Higher within a fixed reward recipe indicates stronger convergence.",
+  "Checkpoint": "Saved policy + value network weights at a specific step count; saved to training/final/ when a milestone gate is set.",
+  "Toddler tier": "Skill ladder Level 1: Stand still 10 s (10/10), survive a 30 N·s lateral shove standing (≥9/10) and walking (≥9/10) with zero non-foot floor contacts.",
+  "Child tier": "Skill ladder Level 2: Walk smoothly from standstill at 0.4, 0.8, and 1.2 m/s with velocity error < 0.20 m/s, stance asymmetry < 0.05, and foot force < 3.0 BW.",
+  "Graduation": "100 episodes of randomized race speed and turn commands; an agent must pass ≥90/100 episodes with 0 NaN gradients before ONNX export.",
+  "Body weight (BW)": "99th-percentile foot impact force divided by body weight (722 N for Grandma, 879 N for Matt). ~1.0–1.2 BW standing and ~2.0 BW walking is human-like.",
+  "Jerk": "Mean squared change in joint actions between 50 Hz steps; lower values (~0.007–0.011) produce smooth, natural motion without high-frequency jitter.",
+  "PPO losses": "Learner health signals: policy loss (surrogate update magnitude), value loss (critic prediction error), and entropy loss (negative exploration entropy)."
+ },
+ "dead_ends": [
+  "g1",
+  "g2",
+  "g4",
+  "g5",
+  "g8"
+ ]
+}

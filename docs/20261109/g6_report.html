@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Grandma g6 Training Report — 2026-11-09</title>
+<style>
+  body { font-family: system-ui, -apple-system, sans-serif; background: #0f141c; color: #e6edf3; margin: 24px; line-height: 1.5; }
+  h1, h2 { color: #58a6ff; }
+  .card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 16px; margin-bottom: 20px; }
+  table { border-collapse: collapse; width: 100%; margin-top: 8px; }
+  th, td { border: 1px solid #30363d; padding: 8px 12px; text-align: right; font-variant-numeric: tabular-nums; }
+  th:first-child, td:first-child { text-align: left; }
+  th { background: #21262d; color: #79c0ff; }
+  .peak { color: #3fb950; font-weight: 700; }
+  svg { width: 100%; max-width: 780px; height: 220px; background: #0d1117; border: 1px solid #30363d; border-radius: 6px; margin-top: 10px; }
+</style>
+</head>
+<body>
+<h1>Grandma Run <code>g6</code> — 102.7M Step Training Report</h1>
+<div class="card">
+  <h2>Run Summary &amp; Run-Over-Run Delta (<code>g5</code> → <code>g6</code>)</h2>
+  <ul>
+    <li><strong>Checkpoint:</strong> <code>training/runs/g6/params.pkl</code> (resumed from <code>runs/g5/checkpoints/000034242560</code>)</li>
+    <li><strong>Steps &amp; Wall Time:</strong> <code>102,727,680</code> steps in <code>2,314 s</code> (38.6 min, ~44,394 steps/s on RTX 2060 6 GB)</li>
+    <li><strong>Tags:</strong> <code>physics 5e79c99044f02ace</code> · <code>interface 265293b4b0b21c42</code> · <code>obs 103</code> · <code>act 29</code> · <code>clock: v0=0.9 Hz, slope=0.2</code></li>
+    <li><strong>Episode Reward Delta:</strong> <code>13.47</code> (step 0) → <span class="peak">121.43 peak (70.3M)</span> / <code>120.32</code> (97.3M) / <code>117.38</code> (102.7M) (+8.0× over start)</li>
+    <li><strong>Episode Length Delta:</strong> <code>64.9</code> → <span class="peak">378.7 steps (70.3M)</span> (+5.8× survival duration)</li>
+    <li><strong>Velocity Tracking Delta:</strong> <code>tracking_lin_vel</code> <code>72.2</code> → <span class="peak">526.3 (97.3M)</span>; <code>tracking_ang_vel</code> <code>30.2</code> → <span class="peak">363.8 (97.3M)</span></li>
+  </ul>
+</div>
+
+<div class="card">
+  <h2>Eval Episode Reward Curve (0 → 102.7M Steps)</h2>
+  <svg viewBox="0 0 760 200">
+    <polyline fill="none" stroke="#30363d" stroke-width="1" points="40,20 40,175 740,175"/>
+    <polyline fill="none" stroke="#3fb950" stroke-width="2.5"
+      points="40,158 77,151 114,145 151,125 188,94 225,97 262,78 299,57 336,40 373,50 410,52 447,42 484,42 521,20 558,52 595,26 632,50 669,25 706,22 740,25"/>
+    <text x="45" y="34" fill="#3fb950" font-size="12">Peak: 121.43 @ 70.3M (120.32 @ 97.3M, 117.38 @ 102.7M)</text>
+    <text x="45" y="170" fill="#8b949e" font-size="11">0 steps (13.47)</text>
+    <text x="640" y="192" fill="#8b949e" font-size="11">102.7M steps</text>
+  </svg>
+</div>
+
+<div class="card">
+  <h2>Checkpoint &amp; Eval Telemetry Table</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Steps</th>
+        <th>Wall Time (s)</th>
+        <th>Eval Reward</th>
+        <th>Avg Episode Length</th>
+        <th>Tracking Lin Vel</th>
+        <th>Tracking Ang Vel</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>0</td><td>139</td><td>13.47</td><td>64.9</td><td>72.2</td><td>30.2</td></tr>
+      <tr><td>16,220,160 (ckpt)</td><td>525</td><td>39.12</td><td>142.9</td><td>206.1</td><td>89.5</td></tr>
+      <tr><td>32,440,320 (ckpt)</td><td>871</td><td>76.46</td><td>254.5</td><td>311.1</td><td>197.0</td></tr>
+      <tr><td>43,253,760</td><td>1,087</td><td>106.39</td><td>345.7</td><td>407.5</td><td>307.9</td></tr>
+      <tr><td>54,067,200 (ckpt)</td><td>1,302</td><td>96.68</td><td>317.2</td><td>411.6</td><td>295.2</td></tr>
+      <tr><td>70,287,360 (peak)</td><td>1,637</td><td class="peak">121.43</td><td class="peak">378.7</td><td>490.9</td><td>350.8</td></tr>
+      <tr><td>81,100,800</td><td>1,863</td><td>117.28</td><td>362.4</td><td>520.6</td><td>353.1</td></tr>
+      <tr><td>91,914,240</td><td>2,089</td><td>117.89</td><td>375.9</td><td>433.0</td><td>358.2</td></tr>
+      <tr><td>97,320,960</td><td>2,201</td><td class="peak">120.32</td><td>–</td><td class="peak">526.3</td><td class="peak">363.8</td></tr>
+      <tr><td>102,727,680 (final)</td><td>2,314</td><td>117.38</td><td>–</td><td>–</td><td>–</td></tr>
+    </tbody>
+  </table>
+</div>
+</body>
+</html>

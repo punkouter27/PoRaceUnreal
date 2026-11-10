@@ -1,0 +1,408 @@
+# rl_optimization_log.md
+
+Runs, decisions and gate results. Newest at the bottom.
+
+## 2026-10-07 Phase 0 / A: toolchain and model derivation
+
+**Machine:** Windows 11, RTX 5070 Ti Laptop 12 GB, driver 610.78, CUDA 13.3 toolkit, Docker Desktop 29.7 with GPU passthrough verified (`nvidia-smi` inside `nvidia/cuda:13.0.1`).
+
+**Decision: trainer runs in Docker, not native Windows.** JAX has no CUDA wheels for native Windows and MJX/Warp needs JAX on the GPU to share device buffers. Image: `training/Dockerfile` (Ubuntu 24.04, Python 3.12, jax[cuda13] 0.11.2, mujoco 3.15.0, mujoco-warp 3.15.0, playground 0.2.0, brax 0.14.2).
+
+**Decision: port playground Go1 envs to Go2.** mujoco_playground has no Go2 env. Same 12-joint topology; the port is paths, constants and the joint order (Go2 menagerie order is FL, FR, RL, RR; Go1 playground is FR, FL, RR, RL).
+
+**Decision: PD gains baked into the XML.** Playground applied Kp=35 / Kd=0.5 at runtime on top of the menagerie file (gainprm 50). `go2_porace.xml` carries gainprm 35, biasprm 0 -35 -0.5, joint damping 0.5, so the trainer and Unity load literally the same numbers.
+
+**Decision: cubes park on the floor at (20+2k, 20, 0.05).** First attempt parked them under the floor at z=-10; MuJoCo's infinite plane treats anything below it as a deep penetration. Found by `check_model.py`.
+
+**Unity plugin facts (org.mujoco 3.15.0) that shape Phase B:**
+- Ignores MJCF `timestep` and `gravity`; takes them from Unity Time and Physics settings. Must set fixedDeltaTime = 0.004.
+- Importer has no `<include>`, no `<keyframe>`, no `<contact>` sensor. `flatten_for_unity.py` writes `Assets/MuJoCo/go2_unity.xml`; C# sets the home pose and finds sensors by name.
+- `MjGlobalSettings` does not parse `ls_iterations` or the `eulerdamp` flag. Set them on `mjModel.opt` from C# after scene creation and assert in the B.3 readback.
+- Unity regenerates MJCF from its component tree at play time, so model fields (not just the file) must be compared against the trainer. Added to B.3.
+
+**check_model.py result (CPU MuJoCo 3.15.0):** nq=47 nv=42 nu=12 ngeom=61, robot mass 15.206 kg, no self-contacts at home, only feet touch the floor. Passive 2 s hold at home ctrl settles to base z = 0.2395 m (3 cm sag) and joint sag up to 0.26 rad on the calves. Those settled values are in `docs/model_summary.json` and are the zero-brain reference for Unity.
+
+## 2026-10-07 Phase B: Unity ingestion and zero-brain parity
+
+**Result: ZERO-BRAIN PARITY OK.** 2 s passive PD hold, 101 control frames, worst |dqpos| = 4.75e-8 (tolerance 1e-3). Unity model regenerated from the component tree matches the trainer model in every physical field (`training/compare_models.py`); the only differences are equivalent quaternion sign flips, visual-mesh bounds and the floor plane's render spacing.
+
+Four things that broke parity before it passed, all now handled in code:
+1. **Element order is not stable.** The plugin orders bodies/joints/actuators by EntityId, which changes between runs (cubes came first on the second run). `Go2Model.cs` resolves every qpos/dof/ctrl/sensor address by name; `ParityRecorder` dumps canonical order.
+2. **Generated names get numeric suffixes** unless `MjGlobalSettings.UseRawGameObjectNames` is on. Set in the Testbed scene.
+3. **`MjActuator.OnSyncState` rewrites `mjData.ctrl` from its `Control` field after every step**, silently discarding ctrl written in `ctrlCallback`. `Go2Controller.SetCtrl` writes both. Control is float32, so the Python reference uses float32 ctrl too (Warp is float32 anyway).
+4. **`ls_iterations`, `eulerdamp` and `ccd_iterations` are not parsed by the plugin.** Set on `mjModel.opt` in `postInitEvent`; `ModelCheck.cs` asserts them.
+
+Also: the plugin at tag 3.15.0 does not compile on Unity 6000.6 (`GetInstanceID` is a hard error); patched to `GetEntityId` in the embedded copy. The editor's player loop does not advance while the editor window is unfocused, so parity runs use the headless standalone build.
+
+Passive-hold settled state in both engines: base z 0.2395 m, calf sag up to 0.26 rad (Kp 35 vs ~15 kg).
+
+## 2026-10-07 Phase C plumbing (trainer)
+
+- Ported playground `go1` joystick/getup to `training/go2/` on `scene_porace.xml`. Obs 48 / 42 confirmed on Warp.
+- **njmax 40 (go1 default) silently drops the pooled cubes through the floor**: the four condim-6 pyramidal feet already use 40 constraint rows. Joystick now uses njmax 128, naconmax 8*8192.
+- playground 0.2.0 (PyPI) differs from GitHub main: model upload is `mjx.put_model(m, impl=)`.
+- brax 0.14.2 calls `jax.device_put_replicated`, removed in jax 0.11.2. `train.py` installs a drop-in shim before importing brax.
+- Exporter matches brax exactly: normalize is `(x - mean) / std` with std already containing `std_eps`; MLP layers `hidden_i`, swish, final `tanh(mean)` of the NormalTanh head.
+- `training/gate.sh <run>` = C.8/C.9 in one go: export -> eval R0/R1 -> reference -> assign ONNX + rebuild headless player -> replay -> closed loop -> compare.
+
+## 2026-10-07 Sanity run + gate harness dry run (throwaway policy `runs/sanity`)
+
+- `train.py --timesteps 2000000 --num_envs 2048`: brax rounded to 14.7M steps, 809 s on the RTX 5070 Ti (about 5 min of that is JIT). Final eval reward 16.2. The policy already stands (R0 3/3) but does not walk (0.01 m/s on a 0.5 m/s command).
+- Exporter: ONNX vs numpy reference 2.97e-6 worst over 1000 random obs.
+- Unity replay gate on the trainer's own 250-frame reference: worst |da| = 3.58e-7 (tol 1e-4). Inference Engine CPU backend reproduces the JAX policy.
+- Closed-loop 5 s from the same state and command: PASS on all four metrics (upright, speed, cadence, force). max |dqpos| drifts to 2.8e-2 by 5 s, expected float32 chaos in a closed loop; the metrics, not raw qpos, are the gate.
+- Git Bash mangles `/docs` style container paths: `MSYS_NO_PATHCONV=1` in gate.sh. CPU-only tools run with `JAX_PLATFORMS=cpu` to skip the CUPTI probe.
+- Rung 1 full run launched: `train.py --env joystick --logdir runs/r1` (200M steps, 8192 envs, no pert/DR).
+
+## 2026-10-07 Rung 1 attempt 1 FAILED: NaN poisoning (run discarded, relaunched)
+
+- Symptom: TensorBoard `eval/episode_reward`, `training/policy_loss`, KL all NaN from the 22M-step eval on, while `tracking_lin_vel` and episode length looked healthy. The 92M checkpoint had NaN in every policy tensor and in the obs normalizer. CPU eval still showed "standing" only because MuJoCo resets data when it detects NaN, which disguised the failure.
+- Root cause (`training/nan_probe.py`): the Warp solver (iterations=1, ls_iterations=5, full-collision body geoms) occasionally blows a fallen env up to NaN, about 1 env per 4096 x 170 random-action steps. The termination test `upvector_z < 0` is False on NaN, so the env never reset and fed NaN into the running observation statistics, which then made every obs NaN.
+- Fix: joystick/getup `step` now terminates on any NaN in qpos/qvel, zeroes the reward, `nan_to_num`s obs and metrics, and logs `nan_resets`; the brax autoreset wrapper then swaps the env back to its reset state (`where_done` on data/obs/info). Verified by injecting NaN: done=1, obs finite, nan_resets=1. Unity `AutoReset` has the same guard (NaN base state -> home keyframe).
+- Lesson: watch `training/policy_loss` for NaN in the first 5 evals of every run; a healthy-looking tracking curve is not proof.
+
+## 2026-10-07 Rung 1 attempt 2 FAILED: contacts dropped, dogs sink through the floor (relaunched as attempt 3)
+
+- Same NaN signature at the 22M eval, but `nan_resets` = 0: the physics never went NaN. The obs normalizer std had grown to 1e6 and base/joint positions to 1e5: bodies were falling without end. NaN ctrl from the dead policy is clamped by ctrlrange, which is why physics looked finite and tracking "improved".
+- Root cause: `naconmax = 8 * 8192` (go1 feet-only sizing, 4-8 contacts per env). The full-collision Go2 lying on the floor has ~25 contacts; early in training most envs are fallen, the budget overflows, Warp drops contacts, the dog falls through the floor, and `upvector_z < 0` never fires.
+- Fix: joystick `naconmax = 30 * 8192` (the go1 getup value), `blown_up()` guard in base.py (NaN, |qvel| > 500, |base pos| > 100 m) terminates such envs, obs are `nan_to_num` + clipped to ±100. Probe with the new budget: max|obs| 41, min base z 0.16 over 300 wrapped random-action steps (before: velocities to 285 and positions to 1e5).
+- Side effect: the larger budget needs more GPU memory; the probe OOM'd at 4096 envs with the viewer open. Attempt 3 runs with 8192 envs and memory is being watched; fallback is 20 * 8192.
+- `eval/episode_nan_resets` is now also the dropped-contact detector: it must stay 0.
+- Attempt 3 (naconmax 30*8192) was healthy at 23M (reward 17.1, loss finite, 0 NaN resets) but died of GPU OOM: Warp failed a 254 MB allocation at 7.1 GB used because XLA caches memory it never returns. Attempt 3b resumes from the 23M checkpoint with naconmax 20*8192 and `XLA_PYTHON_CLIENT_PREALLOCATE=true XLA_PYTHON_CLIENT_MEM_FRACTION=0.35`, which bounds XLA and leaves ~7 GB for Warp. If `nan_resets` rises above 0, contacts are being dropped again.
+- Attempt 3c: `--restore` needs an absolute path for orbax (fixed in train.py). Brax restores params only and restarts the step counter, so the resumed run re-evaluates the 23M policy at "step 0" (reward 17.2) and trains a full 200M more; checkpoint names restart too and overwrite `000022937600`. Total Rung 1 budget is therefore ~223M steps.
+
+## 2026-10-07 Paused (user request) with Rung 1 at its 23M checkpoint
+
+- Attempt 3c never logged an eval in over an hour at 100 % GPU. Most likely cause: GPU memory spill. `naconmax` is a total across worlds, and the 128-world eval env was allocating the same contact buffers as the 8192-world training env. On Windows the driver then spills into shared system memory, which is extremely slow (host RAM dropped to 3 GB free, vmmem at 9.4 GB). Not yet confirmed by a clean run.
+- The container became an unkillable zombie; `docker desktop restart` hung; recovery was killing Docker's processes, `wsl --shutdown`, and starting Docker Desktop again. Future trainer runs should use `docker run --init --log-driver none` (reap children, and stop the Warp solver warnings from filling the container log).
+- `train.py` now sizes `naconmax = 30 * num_worlds` per env instance (training env and eval env separately). Untested.
+- To resume: `docker run --rm --init --log-driver none --gpus all -v <repo>\training:/work porace-trainer python train.py --env joystick --num_envs 4096 --logdir runs/r1 --restore runs/r1/checkpoints`, check the first eval for finite loss and 0 nan_resets, then `training/gate.sh runs/r1`.
+
+## 2026-10-08 Rung 1 resumed as runs/r1b (4096 envs, per-instance naconmax) after reboot
+
+- The stall is fixed: evals arrive every ~14 min (23M steps), GPU memory steady at 5.4 GB, `nan_resets` 0. Per-instance `naconmax = 30 * num_worlds` confirmed (the eval env no longer allocates training-size buffers). Launch via `--init --log-driver none --name porace-r1`.
+- Reward 17.2 -> 18.2 -> 18.8 over the first 46M resumed steps. `diag_r1.py` on the 46M checkpoint: turns on command (0.85 of 1.0 rad/s) but stands still for every linear command, mean error 0.56 (bar 0.2). Reward terms: pose saturated (453), tracking_lin_vel rising slowly 277 -> 288 -> 307 of ~1000, swing peak and feet slip rising, so it is beginning to step. Decision: let the 200M run finish before changing rewards.
+
+## 2026-10-08 Rung 0 / Rung 1 PASSED, Unity parity gate PASSED (runs/r1b, 23M + 206M steps)
+
+- Reward 17.2 -> 26.2 over the resumed 206M steps (2 h 10 min at 4096 envs). Walking emerged between 69M and 138M.
+- `eval.py`: R0 10/10, R1 10/10 (mean velocity error 0.092, bar 0.2). The eval is deterministic, so the 10 seeds are identical runs; they add no evidence beyond one. Known gap: from a standstill the policy ignores a 1.5 m/s command (it reaches 1.5 when already walking at 1.0).
+- Unity gate (`Assets/Policies/r1.onnx`): replay worst |da| 9.24e-7 over 250 frames; closed loop 5 s at 0.5 m/s PASS: mean vx 0.428 vs 0.433, cadence 1.71 vs 1.81 Hz, mean |torque| 4.13 vs 3.66 N.m, upright both.
+- First closed-loop attempt FAILED and was caught by `ModelCheck`: Unity fixed timestep had reverted to 0.02 after the reboot (it was only set in the live editor, never saved). Now `ProjectSettings/TimeManager.asset` has 0.004 and `Go2Controller.Awake` sets `Time.fixedDeltaTime` itself.
+- After a reboot the editor needs Unity Hub running for its license; `unity open` hangs otherwise.
+- Rung 2 (`runs/r2`: --pert --cubes --dr from the r1b policy) launched in parallel with the gate.
+
+## 2026-10-08 Rung 2 PASSED (runs/r2, stopped at 92M of 200M)
+
+- `train.py --pert --cubes --dr --restore runs/r1b/checkpoints`: reward 17.8 -> 21.0 -> 20.8 -> 21.7 -> 21.6 (lower than R1 by design: kicks up to 3 m/s, falling 1 kg cubes, randomized mass/friction/gains).
+- Baseline R1 policy on the R2 bar: 7/10. R2 checkpoint 46M: 9/10. Checkpoint 92M: 18/20 (bar 90 %), R1 error 0.091, R0 pass. Reward had plateaued, so the run was stopped there and `checkpoints/000091750400` kept as `runs/r2/params.pkl`. The margin over the bar is zero; more R2 training is the first thing to do if a larger sample dips below 90 %.
+- Unity spot-check (`StressTest.cs`, `PoRace.exe -stress -stressSeed N`): 30 N.s shove at 2 s + pooled cube dropped from 1 m at 5 s, 10 seeds: 9/10 survived in the MuJoCo plugin.
+- `--init` works: `docker stop porace-r2` returned cleanly.
+
+## 2026-10-08 Rung 3 PASSED; behaviour ladder complete
+
+- `train.py --env getup --num_envs 4096` (52M steps, 28 min): reward 1.0 -> 5.2 -> 10.0 -> 11.2 -> 15.9. At 26M only some starts recovered; the last interval made the difference.
+- `eval.py --rung r3 --seeds 20`: 20/20 standing within 3 s (slowest 2.18 s).
+- Unity (`PoRace.exe -getupTest -stressSeed N -mode Getup`, random orientation at 0.5 m, random joint angles, 0.5 s hold): 10/10, slowest 2.22 s.
+- `Go2Controller` now has a real state machine for the switch (`Active`): Locomotion -> Getup when upvector z < 0, back only after 0.5 s with z > 0.9. The earlier version had no hysteresis.
+- Final Testbed build: locomotion `r2.onnx` + getup `r3_getup.onnx`, autoGetup on.
+
+| Rung | Trainer (CPU MuJoCo) | Unity (MuJoCo plugin) |
+|---|---|---|
+| R0 stand | 10/10 | covered by closed-loop gate |
+| R1 walk + turn | 10/10, err 0.092 (identical deterministic runs) | replay 9.2e-7, closed loop PASS |
+| R2 push + cube | 18/20 | 9/10 |
+| R3 stand-up | 20/20 | 10/10 |
+
+Not yet verified: the combined fall -> getup -> resume walking sequence in one run (the cube and shove rarely knock the R2 policy over), and the 1.5 m/s from-standstill gap.
+
+## 2026-10-08 Tightening the ladder after review: three gaps found and closed, one reopened
+
+- **End-to-end recovery** (`eval.py --rung combo`, Unity `-comboTest`): walk, get flipped onto a fallen pose at 2 s, auto-switch to getup, switch back, walk again. 20/20 trainer, 10/10 Unity, back to walking ~1.5 s after the flip.
+- **R1 eval is now really randomized** (joint offsets, a 1.5 m/s command from standstill, four random commands per seed).
+- **Freeze on fast standstill starts:** from rest the policy tracks forward commands up to 1.2 m/s, braces and does not move for >= 1.3 m/s, but walks backward at 1.5 and reaches 1.41 when the command ramps. Noise or nudges do not break the freeze. Fix: a command slew limit `CMD_SLEW = 6` m/s^2 applied identically in eval, `record_reference.py` and `Go2Controller` (0.25 s to reach 1.5). With it R1 is 10/10, standstill-to-1.5 error 0.13. This is a controller-side fix, not a policy fix.
+- **True closed-loop parity:** Unity read gyro/linvel/orientation sensors in `ctrlCallback` (after `mj_step1`, fresh), while the trainer's observation uses `sensordata` left over from the start of the previous physics step (4 ms older). Unity now snapshots those sensors in `preUpdateEvent`. `ParityRecorder` and `zero_brain.py` both record after the 5th physics step of each action. Result: 5 s closed loop max |dqpos| 4.2e-4 at 0.5 m/s and 1.9e-6 at 1.5 m/s (was 0.8 rad of drift); speed, cadence and torque agree to 4 digits. Zero-brain still 4.5e-8.
+- **R2 reopened.** `eval.py` cleared the push force after 20 physics steps (24 N.s), Unity applied the full 30 N.s. With the eval fixed, the r2b policy scores 35/40 in the trainer and 17/20 in Unity: 87.5 %, below the 90 % bar. Root cause: training kicks peak at 0.318 * 15.2 kg * 3 m/s = 14.5 N.s, half the bar. `train.py --kick_max 7` (~34 N.s) added; run `runs/r2c` continues from r2b.
+
+## 2026-10-08 FINAL: all behaviours achieved (trainer and Unity)
+
+Final policies: `training/final/go2_loco_params.pkl` (= runs/r2c checkpoint 23M: r1 23M + r1b 206M + r2 92M + r2b 46M + r2c 23M with `--kick_max 7`) and `training/final/go2_getup_params.pkl` (runs/r3, 52M). Unity: `Assets/Policies/go2_loco.onnx`, `go2_getup.onnx`. Stronger kicks fixed R2 in one 12-minute interval (reward 15.6 -> 17.1).
+
+| Behaviour | Bar | Trainer (CPU MuJoCo) | Unity (MuJoCo plugin, headless player) |
+|---|---|---|---|
+| R0 stand 10 s | 10/10 | 10/10 | covered by closed loop |
+| R1 walk + turn, randomized, incl. 1.5 m/s from standstill | err < 0.2, 10/10 | 10/10 | closed loop PASS at 0.5 and 1.5 m/s (1.2588 vs 1.2588 m/s) |
+| R2 30 N.s push + 1 kg cube from 1 m | 90 % | 40/40 | 20/20 |
+| R3 stand up within 3 s | 90 % | 20/20 | 10/10 |
+| Fall -> getup -> resume walking | 90 % | 20/20 | 10/10 |
+| Parity | | | zero-brain 4.5e-8; replay 7.8e-7; closed loop metrics pass |
+
+Caveats: walking from standstill at >= 1.3 m/s relies on the 6 m/s^2 command slew limit (policy still braces on a raw step). The 0.5 m/s closed-loop run drifts to 0.78 rad max |dqpos| by 5 s while passing all gait metrics (the 1.5 m/s run stays within 7e-6); float-level divergence in a chaotic gait, not a model mismatch. R0/R3 evals are noise-free.
+
+## 2026-10-08 Phase D: game-side polish
+
+- `Assets/Scenes/Race.unity`: the validated Testbed creature without harness components (ParityRecorder, ReplayHarness, StressTest removed), authored in the editor. Behaviour selector (top right): Stand / Walk 1.0 / Run 1.5 / Turn / Flip (`Go2Controller.KnockOver` writes qpos only). Bottom left: Reset / Shove / Cube / Drop. TAB toggles telemetry. Built to `Build/Race/PoRace.exe`.
+- Editor tests: `NoPhysXTest` 2/2 (no Rigidbody/Collider/Joint in Testbed or Race; fixed timestep 0.004).
+- Performance (`PerfProbe`, headless, 10 s at 1.0 m/s): physics step mean 0.182 ms including amortized inference (inference alone 0.289 ms per call), i.e. 0.91 ms per 50 Hz control step for one racer; 3.6 ms extrapolated for four (budget 5.0). Worst single step 8.7 ms (one spike). Extrapolation only; no multi-racer scene yet.
+- Regression after the changes: stress 5/5, combo 3/3.
+- `docs/report/training_report.html` regenerated from the final results (`training/report.py`, data in `docs/report/tb_final.json`).
+
+## 2026-10-08 First race: Map 01 Planar Sprint (no new training)
+
+- `Track01.unity` + `RaceOrchestrator.cs`. The racer is the validated locomotion policy driven by a waypoint steer: `vx = 1.5 * max(0.3, cos(err))`, `yaw rate = clamp(1.5 * err, +-1)`, through the same 6 m/s^2 command slew. Rails are MjGeom boxes in the MuJoCo world, so hitting them is solver contact; `NoPhysXTest` covers the scene (2/2).
+- Headless results (deterministic, identical on repeat): 100 m in 74.42 s, splits 17.79 / 36.30 / 54.88 / 74.42, average 1.34 m/s, 0 respawns. With `Go2Controller.KnockOver` at race time 20 s: getup, brain switch, resume; 75.67 s, 0 respawns (1.25 s lost).
+- Top speed is the limit: commanded 1.5, achieved about 1.35 on a long straight. Faster racing needs a policy trained on a wider command range.
+- `ResetToHome` now spawns at `spawnMj` / `spawnYaw`, which the orchestrator moves to the last checkpoint.
+
+## 2026-10-08 Four-dog race (no new training)
+
+- **One model, four robots.** `Track01x4.unity`: the imported robot subtree (base + actuators + sensors) is cloned three times inside the same `go2_scene`, every MuJoCo name prefixed `r1_`..`r3_`, so all racers and the rails live in one mjModel (nq 104, nv 96, nu 48). `Go2Model(prefix)`, `Go2Controller.prefix/multiRobot`, `ModelCheck(robots)`. In multi-robot scenes `ResetToHome` writes only that robot's qpos/qvel (no `mj_resetData`).
+- **Race:** `MultiRaceOrchestrator.cs`: countdown, per-racer lane steering through the joystick command, checkpoints every 25 m for respawn, live standings, pack-framing camera, robot-robot contact counter (from `mjData.contact`).
+- **First version produced zero bumps** (cruise 1.5/1.44/1.38/1.32 with lanes pinched to 45 %): the pack spread out before the pinch. Changed to closer speeds (1.47 / 1.41 / 1.44 / 1.50, fastest on the outside lanes) and a full merge to one line between 40 % and 60 % of the track.
+- **Result (headless, identical on repeat):** Gold 74.22 s, Blue 76.02, Green 76.85, Red 78.22; 162 contact episodes, 8.11 s in contact, 0 respawns. The policies were never trained against another robot; the push/cube robustness carried over.
+- **Flip the leader at 30 s:** it was run into by the pack, did not get up within the 6 s limit, was respawned at its checkpoint and finished last (97.75 s). Alone on the track the same flip costs 1.25 s. Getting up inside a crowd is not something the getup policy was trained for.
+- **Performance, measured:** 0.394 ms per physics step for four racers including inference = 1.97 ms per 50 Hz control step (budget 5.0). Worst single step 6.7 to 15 ms (occasional spikes, probably GC/first-use).
+- **Regression after the refactor:** zero-brain 4.47e-8, replay 7.75e-7, 1.5 m/s closed loop 6.74e-6, stress 5/5, combo 5/5, single race 74.42 s: all identical to before. `NoPhysXTest` 2/2 across Testbed, Race, Track01, Track01x4.
+
+## 2026-10-08 Maps, oval, menu, randomized races; the "crowd getup" problem was a freeze, not getup
+
+- **Maps as data:** `MapDefinition` (centerline polyline, laps, grid, lane-squeeze curve) in `Assets/Resources/Maps`, discovered by `MapRegistry`. `TrackBuilder` (editor) generates MuJoCo rail geoms and visuals; `MultiRaceOrchestrator` follows any centerline with laps, checkpoints and a track-frame chase camera. Map 02 Flat Oval: 97.6 m lap, two 180 degree turns of radius 6 m.
+- **Oval, 4 racers, 2 laps (headless):** all finish with 0 respawns; steering by velocity command handles the corners. With straight lanes there were 0 bumps and the inside lane always won, so the lanes now squeeze to 35 % (a racing line) after the start straight: seed 1 419 bumps, seed 2 79 bumps, different winners.
+- **Randomized races:** seeded lane draw + 6 % cruise-speed spread; `-seed N` reproduces a race exactly. Sprint seed 1: 79.31 / 79.37 / 79.45 / 80.47 s, 267 bumps.
+- **Menu:** `Menu.unity` -> pick map / racers 1-4 / laps -> scene load. Racers beyond the chosen count are deactivated before MjScene compiles, so the model really has N robots (ModelCheck passes for 3). Headless `-menuMap i -raceTest` works for both maps. Combined build `Build/PoRace/PoRace.exe`.
+- **Crowd recovery, diagnosis:** the earlier respawn of a flipped leader was logged as `[AutoReset] RACING fallen=0.0s stalled=8.0s`: the dog was upright. It had been bumped to a halt while its slew-limited command was still ~1.4 m/s, which is exactly the standstill freeze (brace instead of walk for vx >= 1.3). The getup policy itself passes a new push test (`eval.py --rung crowd`: fallen start + two 30 N.s pushes during recovery) 19/20 without any retraining.
+- **Fix (race side):** `MultiRaceOrchestrator` restarts the command ramp (`Go2Controller.RestartCommandRamp`) when a racer in Locomotion has a filtered command > 1.0 m/s but moves slower than 0.3 m/s for 0.5 s. Five seeded sprint races with the leader flipped at 30 s: 0 respawns, un-stick fired twice. The verified controller/parity path is unchanged.
+- `getup.py` gained optional kicks and falling cubes (`train.py --env getup --pert --cubes`) in case a harder recovery bar is wanted later; not used.
+- Faster dog: `train.py --vx_max 3.0` (forward commands to 3 m/s, reverse 1 m/s) running as `runs/r4` from the final locomotion policy.
+
+## 2026-10-08 Faster dog, attempt 1 FAILED (runs/r4_fixed_sigma_failed): the freeze is a reward artefact
+
+- `--vx_max 3.0` from the final locomotion policy. `speed_probe.py`: at 23M steps the policy still reached 1.37 m/s on a 1.5 command and stood still for 2.0+; at 46M it stood still at 1.5 as well. More training made it refuse more commands, not run faster.
+- Cause: `tracking_lin_vel = exp(-err^2 / 0.25)`. On a 3 m/s command, running at 1.4 scores exp(-10) = 4e-5 and standing scores exp(-36) = 0: no gradient toward running, and standing is cheaper in energy/torque terms. The same arithmetic explains the original standstill freeze at >= 1.3 m/s (standing vs. a slow start are both worth ~0).
+- Fix: `reward_config.sigma_speed_scale` (on with `--vx_max`): sigma * max(1, |cmd_xy|)^2, so a 3 m/s command tolerates ~1.5 m/s of error the way a 1 m/s command tolerates 0.5. Attempt 2 (`runs/r4`) uses it with `--vx_max 2.5`.
+- Operational: closing the Unity editor during training frees ~2.5 GB of GPU memory; with it open the 12 GB card sits at 9-11 GB and intervals take 25+ min instead of 12.
+
+## 2026-10-08 G1 biped: model derivation and zero-brain parity
+
+- Source: mujoco_playground stock G1 (menagerie `unitree_g1` + playground feet-only scene): 29 position actuators (kp 75/20/2), 33.34 kg, 500 Hz, iterations 3, Newton.
+- The Unity plugin has no `<contact><pair>` and no joint `actuatorfrcrange`. `training/g1/make_model.py` rewrites them: foot-floor and foot-foot pairs -> contype/conaffinity 1 on floor + feet (condim 3, friction 0.6); hand-thigh pairs dropped; per-joint force limits -> `forcerange` on the joint's actuator. Verified against the stock model: all masses, inertias, ranges, gains equal; 2 s PD hold differs by 1.25e-8.
+- Trainer model `training/g1/assets/g1_porace.xml` has the visual meshes stripped (every body has an explicit inertial); Unity model `Assets/MuJoCo/g1/g1_unity.xml` keeps them (35 STL, 19.7 MB). 11 STLs had a header starting with "solid", which Unity's importer rejects as ASCII; the header is rewritten on copy.
+- `G1Controller.cs` (103-dim obs incl. gait clock, decimation 10, sensor snapshot before mj_step1, `[G1Check]` readback) + generic `IParitySource` recorder. **G1 zero-brain parity: 9.41e-7 over 1 s** (`training/g1/zero_brain.py`), first run.
+- The trainer image never had the menagerie: the Dockerfile `RUN` line contained a literal `
+` and failed, hidden by `| tail`. Fixed; the image now has 68 models.
+- Ready but untested (need the GPU): `train.py --env g1`, `g1/sim.py eval|record`.
+
+## 2026-10-26 Android native MuJoCo, banked turns (F.8), faster dog attempt 2 FAILED (runs/r5)
+
+Machine change: this workstation has an RTX 2060 (6 GB, sm_75), not the RTX 5070 Ti the earlier runs used. `runs/r4` did not come across; only `training/final/*.pkl`. `train.py --restore_params <params.pkl>` (brax `restore_params`: normalizer, policy, value) starts a run from those pickles without an orbax checkpoint.
+
+**GPU budget on 6 GB:** 4096 and 2048 envs fail with Warp `out of memory` in the convex narrowphase (a 63 MB allocation) even with `XLA_PYTHON_CLIENT_PREALLOCATE=true XLA_PYTHON_CLIENT_MEM_FRACTION=0.22`. 1024 envs run at ~44k steps/s (with the Unity editor open): 60M steps in ~25 min. `--timesteps 1` is rounded up by brax to a ~15M-step minimum schedule.
+
+**Android (E.1).** `tools/android/build_mujoco_android.sh` builds MuJoCo 3.15.0 for arm64-v8a with the NDK r27c / CMake / Ninja shipped in the Unity Android module: `Assets/Plugins/Android/arm64-v8a/libmujoco.so` (5.5 MB stripped, c++_static, 16 KB page alignment, needs only libc/libm/libdl). All 348 `DllImport("mujoco")` entry points resolve. Needs `ANDROID_PLATFORM=android-28` (bionic declares `aligned_alloc` from API 28), so the player minimum SDK is now 28 (was 26). Work dirs must be short (FetchContent stamp paths exceed MAX_PATH). `PlayAab.Prepare()` refuses to build without the .so.
+- Pixel 9 Pro (Android API 37), side-loaded as `com.punkoutersoftware.poracer.dev` (the phone holds an older ML-Agents build under the release id, signed with another key; left untouched): the four-dog model compiles, `ModelCheck` OK for all four robots (same nq/nv/nu/mass/dt as desktop), **60 fps, sim 250 Hz real time, inference 0.40 ms**.
+
+**Banked turns (F.8), trainer side.** `tilt_config` in `joystick.py`: gravity tilted per env by a per-body force at the COM, `m_b * 9.81 * (g_dir - (0,0,-1))` (exactly a tilted floor, no scene change, parked cubes unaffected; masses come from the DR model). The gravity obs uses `g_dir`, which is what the IMU reports on a real slope. Tilt magnitude U(0, max) in any direction (25 % flat), new target every 2-6 s, ramped at 20 deg/s so flat-to-bank transitions are trained. `train.py --tilt_max 17`. Disabled = bit-identical obs.
+- `eval.py --rung bank`: real geometry, not tilted gravity: the floor plane is rotated (recompiled via MjSpec: static world-geom poses are fixed at compile, editing `m.geom_quat` afterwards silently does nothing), obs keep world z as in Unity, the dog starts standing on the slope. 15 deg in a random direction: 1.5 m/s straight, 1.0 m/s circling at 0.8 rad/s, 1.5 m/s straight; pass = upright and mean error < 0.3. Baseline (final flat policy): 0/10.
+- `runs/r6` (slopes only, `--pert --cubes --dr --tilt_max 17`, from final, 1024 envs, 74M steps): bank 6/10, R1 10/10, R2 8/10 (R2 bar is 9). Bank score rose 2 -> 4 -> 5-6 over the run; `runs/r7` continues it.
+
+**Banked turns, Unity side.** `MapDefinition.bankDeg` (curve over the lap, degrees, positive rises to the right) + `SurfaceHeight(s, lateral)`; pivot on the inside edge so it meets the floor flush. `TrackBuilder`: Map 03 "Banked Oval" (the oval with 15 deg turns, 4 m ramps on the straights), `PoRace/Build Banked Oval` -> `Track03.unity`. The plugin's heightfield needs a Unity Terrain and GPU readback (breaks `-nographics`), so the surface is 324 convex prism pieces as MuJoCo mesh geoms (MuJoCo collides with the hull; neighbours share corner points exactly, turn pieces are exactly planar) with floor contact settings (priority 1, friction 0.6, condim 3, contype 1 / conaffinity 0), drawn by one combined mesh. Rails follow the surface; respawn height adds the surface height. Track03's racers use `Assets/Policies/go2_loco_bank.onnx` (r6; onnx-vs-numpy 6.5e-6); the flat tracks keep the parity-gated policy.
+- Headless 4-dog, 2 laps, Banked Oval. Old flat policy: always finishes but one dog per race gets stuck on the bank (seed 1: Green 465 s / 409 un-sticks; seed 2: Red 280 s, 1 respawn). r6 bank policy: seed 1 all four 154-160 s, 0 un-sticks; seed 2 153-159 s, 5 un-sticks; seed 3 three at 152-158 s, Red 193 s / 60 un-sticks. 0 respawns, 0 flips in all. Flat Oval seed 1 unchanged by the refactor (150.55 s, 419 bumps as before).
+
+**Faster dog, attempt 2 FAILED (runs/r5).** Everything at once (`--vx_max 2.5 --tilt_max 17 --pert --cubes --dr`, sigma_speed_scale on, 1024 envs, 150M steps). Training reward 14 -> 19.2 (90M) -> 17.8, but `probe_ckpts.py` shows the freeze came back harder: at 18-54M the policy stands still on a 1.5 m/s command (R1 0-2/10), recovers to 1.27 m/s at 1.5 by 90M but stands still at 2.0 (baseline reached 1.52). The speed-scaled sigma alone does not fix the freeze; r6 (same everything minus `--vx_max`) does not freeze, so the wider command range is the trigger. Not retried.
+
+## 2026-10-26 (cont.) Bank policy = r7 @ 29.5M; F.8 races clean
+
+- `runs/r7` continues r6 (75M more). `probe_ckpts.py runs/r7 ...`: 29.5M bank 6/10, R1 10/10, R2 10/10, speed 1.5->1.36 / 2.0->1.52; 39.3M 6/10, R2 9/10; then 68.8M 2/10, 78.6M 3/10, 88.5M 5/10 with R2 7/10. Longer training does not lift the bank score. `go2_loco_bank.onnx` = r7 @ 29.5M (onnx-vs-numpy 8.0e-6).
+- What fails in the bank eval: per seed, phase 1 error ~1.50 = standing still when asked for 1.5 m/s from standstill with the slope ahead (uphill or diagonally uphill). Once moving it tracks every heading (circling phase, all directions incl. uphill, error 0.10-0.24). Same standstill freeze as on flat >= 1.3 m/s, made worse by the climb. On the track this only matters after a racer is stopped on the bank.
+- **Banked Oval, 4 racers, 2 laps, headless, seeds 1-5: 20/20 finish, 0 un-sticks, 0 respawns, 0 flips, 147.9-159.0 s** (Flat Oval seed 1: 150.6-155.2 s). Flat Oval seed 1 and Planar Sprint seed 1 identical to before (419 / 267 bumps).
+- Chase camera on banks: `FollowCam.groundHeight` (from `MapDefinition.SurfaceHeightAt`) keeps it 0.6 m above the surface; with the r6 build on the phone it ended up inside the embankment in the turn.
+- Pixel 9 Pro, r6 build, Banked Oval seed 1: all four finish 154.0-165.0 s, 0 respawns (Blue 10 un-sticks; the desktop run of the same seed had none: arm64 float differences diverge the chaotic contact sequence).
+
+## 2026-10-26 (cont.) Broadcast layer (Phase G) and steeplechase (E.3 / G.10)
+
+**Desktop rendering was broken in every player build.** URP's SSAO renderer feature (PC renderer only) found no resources in the player and threw every frame ("Blitter is already initialized"), so desktop builds drew a black screen; the Mobile renderer has no features, which is why the phone was fine. `RenderFix.RemoveSsao` removes it. Builds now run with the editor closed through `BuildCli` (`-executeMethod BuildCli.Windows [-buildPath] [-scenes]`).
+
+**Broadcast layer** (`Assets/Scripts/Broadcast/`, added to Track01x4/02/03/04 by `BroadcastBuilder.BuildEverything`): strain monitor, director, tactics + intent arrows, chat hazards, predictions, live weather, instant replay + ghost, telemetry + stats card, synthesised audio + dust, YYMMDD watermark. Everything reads MuJoCo state; the only new writes are hazards (pooled cubes, shoves capped at 30 N.s through the new `ExternalForces`), weather (world-geom friction x0.7-1.0, inside the 0.4-1.0 floor DR; wind <= 10 N on each base) and the tactics command (vy <= 0.25, inside the trained +-0.8).
+- **Physics unchanged when the new features are off:** Planar Sprint seed 1 `-noTactics` 79.31 / 79.37 / 79.45 / 80.47 s, 267 bumps; Flat Oval seed 1 150.55 s, 419 bumps: identical to before. Stress (30 N.s + cube) 5/5 through `ExternalForces`. The first regression run differed because the menu defaulted to live Monaco weather (0.8 N wind); `-raceTest` now ignores menu weather and chat.
+- **Tactics on, headless seeds 1-5:** Planar Sprint 5/5, Flat Oval 5/5, Banked Oval 5/5 finish, 0 respawns, 1 fall in 40 racer-races. First version failed Banked Oval seed 2 (Gold stuck on the bank, 689 un-sticks): sideways moves on the slope set off the bank policy's uphill-standstill weakness. Banked sections are now a no-manoeuvre zone.
+- Instant replay pauses with `Time.timeScale = 0`, copies mjData aside (`mj_copyData`), plays the qpos ring through `mj_kinematics` + `SyncUnityToMjState`, then copies it back: the race resumes exactly.
+
+**Steeplechase.** Blind policy (same 48 obs) on `scene_steeple.xml`: 140 static boxes (hurdles / steps 3-8 cm, rubble 2-5 cm) on a 28 x 28 m field, foot contact sensors switched to `body2="world"`. Unity Map 04 uses the same boxes as MuJoCo geoms (the plugin's heightfield breaks `-nographics`); visuals from headless Blender (`tools/blender/steeple_props.py`). Bank policy on Track04: every race DNF at the 7-8 cm hurdles (44 m, 80-90 m).
+- **s1 FAILED** (from r7 @ 29.5M, 103M steps, swing target 0.12 m): 0/20 at every checkpoint, ~0.45 m/s under the command at 34M, and from 68.8M it stands still even on flat ground (R1 5/10 -> 2/10). Reward still rose 15.2 -> 16.4. Same no-gradient freeze as the fast-dog runs: once the error is large, exp(-err^2/0.25) is flat, and on obstacles creeping avoids falls.
+- **s2** (same start): `progress` reward = fraction of the commanded speed made along the command (0..1, weight 1, steeple only), swing target back to 0.10, obstacle heights graded from 25 % at the centre to 100 % at the edge. Start point on this field: 15/20. Probes: 11.5M 13/20, 22.9M 16, 34.4M 16, 45.9M 16, 57.3M 15, **68.8M 18/20 with bank 10/10, R1 10/10, R2 10/10, 2.5 m/s -> 1.75**, 80.3M 15. The progress term also cured the bank policy's uphill freeze (bank 6/10 -> 10/10) and lifted top speed. Graduation gate on 68.8M: **82/100 (need 90), 0 NaN -> FAIL**; all 18 failures are tracking errors on the full-height outer field. Not exported.
+- s3 continues from s2 @ 68.8M.
+- s3 (from s2 @ 68.8M) went NaN between 22.9M and 34.4M and was stopped; its clean checkpoints scored 16/20 (11.5M) and 17/20 (22.9M), no better than s2 @ 68.8M.
+- **Shipped without graduating (owner's decision):** `Assets/Policies/go2_loco_steeple.onnx` = s2 @ 68.8M (82/100 gate, need 90; onnx-vs-numpy 6.35e-6), on Track04 only. Headless Steeplechase seeds 1-5: **20/20 racers finish** (old bank policy: 0/20), 89.5-226.9 s, 0-2 respawns and 0-65 un-sticks per racer: the hurdles still stall them. Report: `docs/report/steeple_report.html`.
+
+## 2026-10-27 Steeplechase GRADUATED (G.10): s7 @ 68.8M, 277/300, Track04 40/40
+
+Unattended session, editor closed, RTX 2060, 1024 envs. Every run starts from the previous best and keeps `--pert --cubes --dr --tilt_max 17 --steeple`. New trainer flags (all default off, earlier runs reproduce): `--lr`, `--entropy`, `--progress`, `--swing`, `--p_outer` (share of spawns on the full-height outer ring r 8-12 m). New tooling: `training/launch.sh` (background GPU run, filtered log), `autoprobe.sh` (probe every checkpoint as it lands), `gate300.sh` / `gateall.sh` / `gatespeed.sh` + `autogate.sh` (graduation checks on every checkpoint, CPU, in parallel with training), `diag_steeple.py` (per-phase stall breakdown), `eval.py --first_seed`.
+
+**Selection bias in the old gate.** Checkpoints were picked on seeds 0-99 and then judged on the same seeds: s5 @ 80.3M scored 94/100 there, but 84 and 87 on seeds 100-199 and 200-299. From s6 on, graduation = >= 90 on each of three 100-seed sets (0-99, 100-199, 200-299) and zero NaN, plus R2 x30, bank x30, R1 x20 (`gateall.sh`).
+
+| run | from | change | best checkpoint | steeple gate | R2 x30 |
+|---|---|---|---|---|---|
+| s2 (shipped before) | r7 | progress reward | 68.8M | 82/100 | 10/10 (x10) |
+| s4 | s2 @ 68.8M | lr 1e-4, p_outer 0.5 | 22.9M | 86/100 (later 77, 84, 75) | - |
+| s5 | s4 @ 22.9M | swing target 0.10 -> 0.13 m | 80.3M | 94/100 on 0-99, **265/300** | 30/30 |
+| s6 | s5 @ 80.3M | continue, 150M | 54.1M | 273/300 (91/92/90) | **23/30 FAIL** |
+| s7 | s6 @ 54.1M | kick_max 7 (R2 drifted: s2-s6 used the default 3 m/s kick, the R2 bar needs ~6.2) | **68.8M** | **277/300 (94/91/92), NaN 0** | **30/30** |
+
+- Failure mode (`diag_steeple.py`, s4/s5): never falls; stops dead (vx ~ 0) in front of 6-8 cm hurdles and steps for most of a 4 s phase. The higher swing target shortened the stalls (60-100 % -> 30-60 % of a phase) and moved the pass rate from ~85 % to ~89-91 %.
+- s7 @ 68.8M: steeple 277/300, R2 30/30, bank 15 deg 30/30, R1 20/20, R0 10/10; no NaN metric in any run (s4-s7). Exported: `Assets/Policies/go2_loco_steeple.onnx` (onnx-vs-numpy 6.59e-6); weights `training/final/go2_steeple_params.pkl`.
+- **Track04 headless, seeds 1-10: 40/40 racers finish, 77.5-158.5 s** (s2: 20/20 over seeds 1-5, 89.5-226.9 s, up to 65 un-sticks). Before the fix below, seed 3 Blue was pinned at the 90 m hurdle (8 cm, the course's tallest) for the whole race: 796 un-sticks, DNF.
+- **Back-off (`MultiRaceOrchestrator`):** an un-stick only restarts the command ramp, i.e. from standstill against the bar. Six restarts in a row with < 0.3 m gained now back the racer off at -0.5 m/s for 1.2 s for a run-up. Fired twice in 40 racer-races. Planar Sprint seed 1 `-noTactics` (79.31 / 79.37 / 79.45 / 80.47 s, 267 bumps) and Flat Oval seed 1 `-noTactics` (150.55 s, 419 bumps) identical to before.
+- Operational: a CPU eval container occasionally dies loading the model ("at least 4 vertices required") when several start at once; `gate300.sh` retries a set that ends without a result.
+
+## 2026-10-27 Faster dog GRADUATED (F.9): r13 @ 73.7M, 2.5 m/s command -> 2.30 m/s
+
+New pass bar, `eval.py --rung speed`: from standstill (joint offsets as R1), 2.0 m/s for 5 s then 2.5 m/s for 5 s; pass = upright and >= 90 % of each command over the last 3 s; need 9/10. Checked with `gatespeed.sh` (speed x10 + R1 x20 + R2 x30 + bank x30) on every checkpoint. Start point s7 @ 68.8M (graduated steeple policy): 0/10, ~1.65 m/s on both commands. All runs `--pert --cubes --dr --tilt_max 17 --kick_max 7 --vx_max 2.5`, flat ground (no obstacle field).
+
+| run | from | change | speed rung (best) | mean 2.0 / 2.5 m/s |
+|---|---|---|---|---|
+| r8 | s7 @ 68.8M | progress 1, speed-scaled sigma (attempt-2 setup) | 0/10 | 1.62 / 1.74, flat; stopped at 23M |
+| r9 | s7 @ 68.8M | `--no_sigma_scale`, progress 2 | 0/10 | 1.88 / 2.09; **NaN at 91.7M**, stopped, checkpoint deleted |
+| r10 | r9 @ 68.8M | lr 5e-5 | 0/10 | 1.92 / 2.12 |
+| r11 | r10 @ 45.9M | `--cost_scale 0.25` (torque, energy, action-rate penalties) | 2/10 | 1.97 / 2.22 |
+| r12 | r11 final | continue | 8/10 | 1.97 / 2.27 (swings 3-8/10) |
+| r13 | r12 @ 54.1M | progress 3, lr 5e-5 | **10/10 @ 44.2M, 9/10 @ 73.7M** | 2.00 / 2.31 |
+
+- Why r8 stalled: with `--vx_max` the tracking sigma widens by max(1, |cmd|)^2 (attempt 2's freeze fix), so on a 2.5 m/s command running 1.7 already earns ~2/3 of the tracking reward. The progress reward now supplies the gradient that widening was for, so r9+ keep the sharp sigma (`--no_sigma_scale`).
+- Not an actuator ceiling (`diag_speed.py`, r9 @ 68.8M at 2.5 m/s): calves at the 24 N.m limit 6 % of the time, thighs 1 %, hips 0 %; peak calf speed ~25 rad/s, where the PD derivative term (-0.5 qdot) and joint damping (0.5) each take ~12 N.m.
+- **r13 @ 73.7M, 30 seeds: speed 28/30 (mean 2.00 / 2.30 m/s; failures reach 2.20-2.24 on the 2.5 command), R0 10/10, R1 20/20, R2 30/30, bank 30/30, 0 NaN metrics in r10-r13.** (44.2M: 27/30.) Exported `Assets/Policies/go2_loco_fast.onnx` (onnx-vs-numpy 5.19e-6), weights `training/final/go2_fast_params.pkl`. Not wired into any race: the flat tracks keep the parity-gated policy at 1.5 m/s cruise; a faster race needs the racers' cruise speed raised and a Unity parity / closed-loop check of this policy first.
+- Lower effort penalties mean more power at speed (cost of transport not yet measured in Unity).
+- **Update: r13 final checkpoint @ 118.0M replaces 73.7M.** Speed rung 30/30 (mean 2.04 / 2.36 m/s, every seed above 2.25 on the 2.5 command), R0 10/10, R1 20/20, R2 30/30, bank 30/30, no NaN. `go2_loco_fast.onnx` / `go2_fast_params.pkl` re-exported from it.
+- **Unity parity (C.9 gate) for both new policies**, headless Testbed players built with `PolicyAssign` (Testbed scene restored afterwards): `go2_loco_fast` (r13 @ 118.0M) replay worst |da| 1.10e-6 (tol 1e-4), closed loop at 2.0 m/s for 5 s: mean vx 1.93552 / 1.93551, cadence, force and min z equal -> PASS. `go2_loco_steeple` (s7 @ 68.8M) replay 1.67e-6, closed loop at 1.5 m/s: mean vx 1.31624 / 1.31624 -> PASS. Trajectories: `docs/parity/reference_{fast,steeple}.json`, `unity_closed_loop_{fast,steeple}.json`.
+
+## 2026-10-27 (cont.) Steeplechase polish s8-s10: plateau at ~91-93 %, s7 kept; get-up re-checked
+
+All from s7 @ 68.8M with the s7 flags, every checkpoint through `gateall.sh` (steeple 300 + R2 + bank + R1).
+
+| run | change | checkpoints (steeple /300) | outcome |
+|---|---|---|---|
+| s8 | lr 5e-5 | 273, 277 (grad.), 264, 278 (one set 88), 272 | **NaN at 88.5M**, stopped, checkpoint deleted |
+| s9 | swing 0.14, p_outer 0.7 | 277, 269, 263 | worse every checkpoint, stopped |
+| s10 | entropy 0.01 -> 0.005 | **286 (98/92/96)**, 276, 277, 271, ... | 286 did not hold up on fresh seeds (below) |
+
+- Head-to-head on seeds 300-499 (never used for picking): s10 @ 9.8M 85 + 93 = 178/200, s7 @ 68.8M 92 + 89 = 181/200. Over all 500 seeds: s10 464 (92.8 %), s7 458 (91.6 %) - within noise. **s7 stays** (already through Unity races and parity). s7's true pass rate is ~91-92 %: a single 100-seed set can land at 89.
+- NaN divergence, third time in this chain (s3 @ 3e-4, r9 @ 1e-4, s8 @ 5e-5): not a learning-rate problem. The watchers stop the run and nothing after the NaN is used. Follow-up: find the env that blows up first (`nan_probe.py`) and guard the training batch, not just the termination test.
+- Get-up policy (`final/go2_getup_params.pkl`): R3 30/30. No training needed.
+- Not trained: G1 biped (`G1Testbed.unity` has no policy). Its trainer model collides on the feet only, while the project rules require primitive colliders and self-collision on all non-adjacent segment pairs before training; that collider design needs an owner decision.
+
+## 2026-10-27 Matt (human racer): body, env, first runs
+- Body `training/matt/assets/matt_porace.xml`, generated by `tools/blender/matt_mjcf.py` from the rigged scan (`Assets/Art/Raw/matt.blend`, pinned: the game look lives in `matt_game.blend`): G1 joint layout and names (29 DoF, same sites / sensors / `knees_bent`), joints on the rig's joint heads (max 0.01 mm), capsules / sphere / boxes fitted to the skin each bone owns, Winter segment masses of 88 kg (89.6 kg with the joint links), human ROM and peak torques, full self-collision with 9 explicit excludes for anatomically connected segments, race physics contract (4 ms, Euler, pyramidal, impratio 100, iterations 1, ls 5). `matt/check_model.py`: no self-penetration at rest, knees_bent, T-pose or any of 58 joint-limit extremes (ranges trimmed where feet / forearm / trunk met).
+- Env `training/matt/env.py` = stock playground G1 joystick on that body, sim 4 ms / ctrl 20 ms, vx -0.5..1.6.
+- GPU (RTX 2060 6 GB): 2048 envs OOM in XLA at 10.6M (867 MB rollout buffer above the 0.22 cap); 1024 envs with `XLA_PYTHON_CLIENT_MEM_FRACTION=0.30` run at ~45k steps/s. A Unity batch build on the same GPU killed run m1 with Warp `CUDA error 999` at 10.6M: no Unity (or GPU renders) while training.
+- m1b (resumed m1, kp 600-800): reward -1525 -> -264 by 61M, but eval episode length flat at ~37 of 1000 control steps; CPU diagnosis (`matt/diag.py`): every seed ends with the torso upside down at ~0.58 s, sooner than a passive PD hold falls (1.3 s). Exploration at that stiffness (one unit of action ~ peak torque) throws him over. Stopped at 61M.
+- Solver probe (`knees_bent` PD hold, CPU): iterations 1 / ls 5 lets the feet slide 2.7 cm and sink 2.1 cm in 0.4 s under 89.6 kg; iterations 3 / ls 10: 0.3 cm and 0.5 cm. The race contract is marginal for a heavy biped; kept for now (changing it re-opens the Go2 parity gates).
+- m2: gains rescaled to the G1's x 3.9 (mass x height): legs / waist kp 300 kd 8, ankles 80 / 4, shoulders 100 / 4, elbows 80 / 4, wrists 8 / 0.8; gate re-passed.
+- m2 (40M): reward -4098 -> -898 but eval episode length 64 -> 48: the policy learned to fall sooner. Not the solver: an A/B of the knees_bent PD hold (iterations 1 / 2 / 3, foot priority + mu 1.0, stiff foot solref, sole spheres) gives the same 0.1-0.7 cm ankle slide and the same 10 cm forward topple in 0.8 s, a plain inverted-pendulum fall. The stock G1 reward is sum(terms) * dt with no floor and termination -100 (= -2 per episode); a body that starts toppling at once pays orientation / pose / stand_still penalties every step, so dying early is the optimum. The G1 escapes it by starting stable.
+- m3: `alive` = 2.0 per step (stock scale 0) in `matt/env.py`.
+- m3 (alive 2.0): same decline (episode length 66 -> 48). Reward breakdown: `contact_force` -216000 per episode, every other term < 150. The stock penalty counts foot force above 500 N (1.53 x the G1's weight); Matt's 879 N exceeds it on every single-foot step, so falling was the cheapest outcome. m4: `max_contact_force` 1350 N (1.53 x Matt's weight), alive 1.0.
+- m4 (contact threshold 1350 N): contact_force still -218000. The forces themselves are wrong: standing still, Matt's floor contact force is 3.7x his weight (median) with spikes to 700x under the race contract. A/B (1 s knees_bent hold, floor force / weight, median / p99 / max): impratio 100 iter 1: 3.67 / 586 / 699; iter 3 ls 10: 1.02 / 6.7 / 20.7; impratio 10: 0.98 / 17.8 / 36.5; **impratio 1: 0.98 / 1.6 / 1.7**; elliptic cone 12.8 / 38 / 43; sole spheres, foot priority + solref / friction variants: no better. impratio 100 with a single solver iteration is fine for a 15 kg dog on point feet, not for a 90 kg biped on soles.
+- Dogs at impratio 1 (CPU eval, race policy go2_loco, 10 seeds): R0 10/10, R1 9/10 (seed 3: 1.5 m/s from standstill, err 0.374), R2 10/10; at 100: 10/10 / 10/10 / 10/10. Contract decision: Matt trains and races at impratio 1; a race with Matt on the grid compiles the shared model at impratio 1, a dogs-only race keeps 100 (unchanged, parity-gated). Follow-up: fine-tune the dog policies at impratio 1 to restore the R1 margin.
+- m5 (impratio 1, 40M): first physically sane run. Reward -40.8 -> -3.0, contact_force -1814 -> -54, orientation -74 -> -19, eval episode length 70 -> 60 -> 66 (turning up at the end). m6 continues it for 200M (stock G1 budget).
+
+## 2026-10-27 Matt milestone ladder (`matt/sim.py ladder`)
+- Tiers, each gating the next: toddler (stand 10 s; 30 N.s push standing and walking 0.5 m/s), child (0.5/1.0/1.5 m/s from standstill: err < 0.2, stance symmetry < 5 %, no non-foot floor contact), adult (2.5 m/s jog, 0.8 rad/s turn, 10 % grade). Fallen = pelvis < 0.7 m or torso past horizontal; the old R0 used only the up-vector, which passes Matt lying on his back.
+- m6 (source of the shipped `matt_loco.onnx`): toddler 0/10 on all three checks. CPU diagnosis: on every command (0 to 1.5 m/s) pelvis 0.82 m at 2 s, then 0.18 m by 4 s; floor contacts are hands, pelvis and head. Consistent with MATT-GRADUATE 0/100 (m6_gates.log). The exported ONNX was not graduated.
+- Rule from here: a Matt checkpoint is only a candidate once `ladder --upto toddler` passes; export only after the graduation gate and the child tier.
+
+## 2026-10-27 Matt realism terms (proposals r2, D-track) and m13r
+- `matt/env.py` `cfg.realism`, all 0 by default (a zero weight adds nothing to the traced graph, so m13 and earlier configs are unchanged): `gait_symmetry` (|L - R| air time at touchdown), `torso_ang_acc` (pelvis angular acceleration^2 x 1e-4), `arm_swing` (shoulder pitch vs 0.5 x opposite hip pitch, both axes 0 1 0), `heat` (integral of (tau/tau_max)^2, cools 0.15/s, cost above budget 1), `action_delay_prob` (episodes whose actions land one 20 ms step late), `cmd_accel` (command ramps to each new target; Unity's CmdSlewStep is 6 m/s^2). Enabled with `train.py --set realism.<k>=<v>`. CPU smoke (all on, 60 steps): finite, costs torso -0.33 / arm -0.023, command reaches its target.
+- `matt/sim.py ladder`: new stat `force` = p99 of total foot normal force / body weight after the settle; child walk gate `force < 3.0` (human walk ~1.2, jog ~2.5).
+- m13 (porace-09's chain, m12 + yaw scales): race range 0.8-1.6 54/100 (fail), 0.6-1.1 100/100, 1.25 m/s on 1.5, right turns weaker.
+- m13r: from runs/m13/params.pkl, 100M, lr 1e-4, `--set realism.gait_symmetry=-0.5 realism.torso_ang_acc=-0.5 realism.arm_swing=-0.2 realism.heat=-0.05 realism.action_delay_prob=0.3 realism.cmd_accel=6.0`. First evals: reward 49.9 (0) -> 39.97 (10.8M) -> 50.2 (27M): the new costs dip, then recover.
+- m13r result (102.7M, exit 0, final reward 54.8). Ladder (10 seeds) m13r vs m13: toddler 10/10 x3 both; child walk 1/10 vs 7/10 (err 0.207 vs 0.183); jerk 0.077 vs 0.094 (smoother); push-walking stance asymmetry 0.039 vs 0.145; walking foot force p99 2.61 vs 3.07 BW (m13 is over the new 3.0 gate). Graduation 19/100 (err 0.300) vs m13's 54/100. The realism terms move the gait the right way but cost speed tracking at these weights: not graduated, nothing exported. Next: halve the torso / arm weights and keep the delay + ramp (the race already slews the command), or resume m13r with tracking_lin_vel 2.5.
+
+## 2026-10-28 Matt 10-hour chain (m14+)
+- m14: from m13, 152.5M, tracking_lin_vel 2.5, realism gait -0.5 / torso -0.2 / arm -0.1 / heat -0.05 / delay 0.3 / ramp 6. Reward 50 -> 61.5. **First Matt checkpoint through the child tier** (9/10, err 0.179, sym 0.021, force 2.44 BW); toddler 10/10 x3; adult turn 0.8 rad/s 10/10; jog 2.5 0/10 and 10 % grade 0/10 (never trained: vx <= 1.8, flat). Graduation (race range) 49/100, err 0.254 (m13 54/100). m15 continues it.
+- m15: from m14, same settings, 152.5M, reward 60.5. Child 10/10 (err 0.195, sym 0.016, force 2.30 BW), toddler 10/10 x3; graduation 51/100 (err 0.248): plateau. Error split (30 graduation episodes): |dvx| 0.187 (always slow: -0.11 at 0.8-1.1, -0.20 at 1.1-1.35, -0.29 at 1.35-1.6 m/s), |dvy| 0.052, 0.5|dwz| 0.114 with a left bias: right turns (yaw < -0.3) under-turn by +0.245 rad/s, left turns within -0.06. Speed and right turns are the gap.
+- m16: from m15, tracking_lin_vel 3.0, tracking_ang_vel 1.5 -> 2.0, ang_vel_wide 0.5 -> 1.0, realism unchanged (a first m16 with only lin_vel 3.0 was stopped at ~10 min and deleted).
+- m16 (152.5M): **graduation 83/100** (err 0.203; m15 51/100). Turn bias fixed: overall dwz +0.016, right turns +0.118 / left -0.108 (m15 +0.245 / -0.058). Speed still short at the top: dvx -0.08 / -0.16 / -0.26 by band. Child 9/10 (err 0.155, sym 0.019, force 2.41 BW), toddler 10/10 x3. m17 continues it unchanged.
+- m17 (m16 continued, 152.5M): graduation 83/100 (err 0.202), turns symmetric (+-0.094), speed unchanged (dvx -0.08 / -0.16 / -0.28): the settings have plateaued; the top-speed gap is stride (gait clock fixed at 1.25-1.5 Hz, pose cost taxes stride). Child 10/10, toddler pass (push walking 9/10). m18: from m17 with pose -0.03 -> -0.015.
+- m18 (m17 + pose -0.015, 152.5M): **graduation 97/100 (err 0.176, 0 NaN): first Matt checkpoint through the gate.** Speed gap narrowed (dvx -0.05 / -0.13 / -0.21). But toddler stand 10 s 9/10 (need 10: one seed tipped while standing, non-foot contact) and push standing 9/10: the halved pose cost loosened his stance at rest. Not a candidate under the ladder rule; params kept as `final/matt_m18_grad97_params.pkl`.
+- m19: from m18 with stand_still -1 -> -2 (a zero-command cost, so it shouldn't give back the speed). First launch collided with the deleted folder on the bind mount (FileExistsError); relaunched.
+- m19 (m18 + stand_still -2, 152.5M): toddler 10/10 x3 (stand jerk 0.008, force 1.18 BW: rock steady), graduation 92/100 (err 0.191, PASS), but child 3/10: err 0.135 passes, stance symmetry 0.050 sits on the 0.05 limit (L/R stance share). m20: from m19 with gait_symmetry -0.5 -> -1.5 (first m20 stopped at ~10 min).
+- **m20 (m19 + gait_symmetry -1.5, 152.5M): first Matt policy through every gate.** Graduation 98/100 (err 0.176, 0 NaN) and on fresh seeds 100-199 96/100 (err 0.180). Toddler 10/10 x3 (stand jerk 0.007, 1.10 BW); child 10/10 (err 0.126, sym 0.017, force 2.04 BW); adult turn 0.8 rad/s 10/10; jog 2.5 and 10 % grade 0/10 (never trained: vx <= 1.8, flat floor). Exported `training/final/matt_m20.onnx` (obs 103 / act 29, onnx-vs-numpy 1.1e-5) + `final/matt_m20_params.pkl`. NOT copied over `Assets/Policies/matt_loco.onnx` (m6): deploying is the owner's call, and needs the Unity replay-parity gate (< 1e-4) first.
+- Chain so far: m14 49 -> m15 51 -> m16 83 (turn weights) -> m17 83 -> m18 97 (pose cost halved; stance at rest loosened) -> m19 92 (stand_still -2; child symmetry on the limit) -> m20 98 (gait symmetry x3). m21 continues m20.
+- m21 (m20 continued): graduation 96/100 (err 0.178), toddler 10/10 x3, child 10/10, turn 10/10; jog and grade still 0/10. Same level as m20 (98): m20 stays the candidate. m22: jog branch from m20 with lin_vel_x [-0.3, 2.8] (was 1.8), everything else as m20.
+- m22 (jog branch, m20 + lin_vel_x up to 2.8, 152.5M): graduation **99/100** (err 0.179), child 10/10 (err 0.115, best yet), toddler 10/10 x3, turn 10/10; jog 2.5 got worse (err 1.395, non-foot contact 61.6 = falls). Likely structural: the gait clock is fixed at 1.25-1.5 Hz (stock reset, and Unity's GaitHz), so 2.5 m/s needs ~1.7 m strides with no flight phase. The adult jog needs a speed-dependent gait frequency in env + MattController (a parity change), not more steps. m23 continues m22 to see whether the range still helps.
+- m23 (m22 continued, jog range): graduation 89/100 (FAIL, err 0.189), jog still falls (err 1.388): confirms the gait-clock limit. m22 on fresh seeds 100-199: 92/100 (m20: 96/100). **m20 stays the candidate** (98 / 96 on two seed sets). m24: final run, from m22 back on the race range.
+- m24 (m22 back on the race range, 152.5M, exit 0): not graded yet.
+- **Deployed m20 to `Assets/Policies/matt_loco.onnx`** (owner's call, 2026-10-28; same 103 -> 29 shape as m6, .meta kept). Headless Planar Sprint seeds 3 / 7: Matt stays up (1 fall per race, m6 42-86) but does not walk: AutoReset "stalled 8 s" x23, DNF at 0-1 m, while the CPU sim walks him at ~1.4 m/s. Ruled out: obs layout, command slew (6 m/s^2), GaitHz 1.375, DefaultPose (m14-m24 trained on the committed knees-0.5 knees_bent), MJCF body (only keyframe heights differ). Next: replay parity (`matt/sim.py record` -> MattTestbed `-replay`, gate < 1e-4) to find the divergence.
+- Matt "sinking into the ground" (screenshot, 2026-10-28) was the skin, not the physics. `-contactProbe` (MattController + MattSkin): physics penetration <= 0.1 cm standing and lying (pelvis rests at 0.139 m on its 0.156 m capsule), but the lowest skinned vertex was 8 cm under the floor standing and 9 cm lying. Cause: MattSkin turned the visual +90 deg about up where the physics frame needs -90; the skin's rest frame was the body frame turned 180 deg (shin in the knee frame (0.18, -0.98, -0.04) vs (-0.18, -0.98, 0.04)), so every knee / hip bend copied from the bodies bent the drawn legs the other way. Also: rest rotations now come from the mesh bindposes (the prefab's bones carried a saved preview pose). After: shin angle bone = body in every frame, lowest skin +0.5 cm standing, about -3 cm lying (flesh slightly thicker than the capsules). The m20 "stalled, not walking" issue in Unity is separate (physics) and still open.
+- **Matt sim-to-Unity gap found and fixed (2026-10-28).** Closed-loop parity (matt/sim.py record vs MattTestbed ParityRecorder, m20, 1.2 m/s, 5 s): frame 0 identical (obs < 1e-8, action 4e-7), but after ONE control step qvel differed by 2 rad/s, worst at the left ankle pitch (-4.48 vs -2.44): same inputs, different physics. New `matt/compare_model.py` (diffs the model Unity compiles, dumped with MattTestbed `-dumpModel x.mjb`, against the trainer's) found the cause: `Assets/MuJoCo/matt/matt_unity.xml` was flattened before the ankle pitch range was widened, so Unity's ankle (joint range AND actuator ctrlrange) stopped at -0.35 rad where the trainer allows -0.6: every toe-up the policy asked for was clipped. Regenerated with `matt/model_info.py` (MattSpec.cs unchanged) and rebuilt with MattBuilder + BroadcastBuilder. After: model diff = ccd_iterations and floor render size only; closed loop PASS (vx 0.960 / 0.960, cadence 2.41 / 2.41 Hz, force 19.84 / 19.84, 4.81 vs 4.78 m). Races: Matt finishes Planar Sprint seeds 7 / 3 in 75.8 / 75.0 s and Flat Oval in 75.9 s, 0 falls, 0 resets (dogs 65-72 s). Rule from here: run `matt/compare_model.py` after any change to matt_porace.xml.
+
+## 2026-11-09 Proposals round 3 on the RTX 2060 PC: Matt m25 (gait clock v2), Grandma
+- Fresh checkout on the RTX 2060 6 GB PC. Unity with `-batchmode -nographics` (compile, builders, player builds, race tests) ran beside training with no CUDA trouble; only graphics captures wait for the GPU. MuJoCo-Warp prints "solver iterations limit reached" every step (m25.log 300 MB): launches now filter it.
+- Baseline check of the refactored CPU sim (phase now integrated, not step x constant): m20's ladder reproduces the logged numbers exactly (toddler 10/10 x3, child 10/10 err 0.126 sym 0.017 force 2.04 BW, jog 0/10, grade 0/10), and a Unity race with Matt is bit-identical (Planar Sprint seed 7, Matt 76.86 s). New ladder metric `hf` (action power above 8 Hz): m20 0.05-0.07 standing / pushed, 0.114 walking, 0.165 at 2.5 m/s. Report only (a 10 % gate would fail the shipped policy).
+- m25: from m20 (`matt/launch.sh`, the m20 recipe), gait clock v2 (stride frequency +0.2 Hz per m/s above 1.2 m/s), forward commands to 2.8 m/s, 202M steps (the G1 config's default length; 74 min). Eval reward 60.5 -> 45-58 for most of the run -> 62.5 at the end; episode length ~870 of 1000 throughout; velocity tracking 1518 -> 1320. Ladder: toddler 10/10 x3, **child 2/10 (stance symmetry 0.068 over the 0.05 limit)**, graduation 95/100 (err 0.178). Jog: at 2.0 m/s m25 0/10 (err 0.416) vs m20 0/10 (0.445); at 2.5 m/s **m25 falls 10/10** where m20 stays up (err 0.913). Not shipped: a faster clock alone doesn't make a jog. The missing piece is a flight phase (both feet off the ground), which the stock feet-phase reward never asks for. m20 stays.
+- Grandma (new character, from scratch): see docs/20261109/session.md for the body; runs g1+ below.
+
+### Grandma g1 (2026-11-09, 15:24–16:30, 202M steps, `grandma/launch.sh g1`): FAILED, falls at once
+- Eval episode length 260 at step 0 → 3.8 by 31M, flat to the end (3.73); reward −40.9 → −1.69; tracking_lin 7.4.
+- Same collapse as Matt m2–m4: a net-negative reward per alive step makes ending the episode the optimum. Not graded (nothing to grade).
+- Diagnosis under way (`grandma/diag_reward.py`, session porace-3a). Run g2 waits for the reward fix; do not restore from g1.
+- Diagnosis (session porace-3a): not physics. Zero-action resets with the stock randomisation on CPU (`grandma/diag_reset_rand.py`, 200 seeds) and in the GPU env (`grandma/diag_env.py`): no NaN, no contact-buffer overflow, no early termination. Reward (`grandma/diag_reward.py`, a fresh-PPO-like policy): −0.38 per living step on the plain recipe, −0.44 with her launch recipe (foot `contact_force` −18 / step against `alive` +1), against a one-off fall penalty of −2.
+- Fix 1, `positive_reward` (matt/env.py `MattJoystick.step`, legged_gym's only_positive_rewards): each step's living reward floored at 0, the termination penalty kept outside the floor. Default off (Matt unchanged), on in grandma/env.py.
+
+### Grandma g2 (2026-11-09 21:39–21:51 UTC, stopped at 32M): FAILED, sits on the floor
+- Floor only. Eval length 283 → 978 by 10.6M, reward −1.2 → +1.2 flat, tracking_lin 302 → 1183: looked like success.
+- Ladder of the 32M checkpoint (`ckpt_params.py` + `matt/sim.py ladder --creature grandma`): toddler stand 0/10, push standing 0/10, push walking 0/10; foot force 0.00 BW, non-foot floor contact 464. She sat upright on the floor: the stock termination only ends an upside-down torso, so sitting lived the whole episode on the floored alive bonus. Lesson: grade an early checkpoint, never trust episode length alone.
+- Fix 2, `fall_height` (matt/env.py `MattJoystick._get_termination`): pelvis below it ends the episode. Default 0 = off (Matt unchanged); Grandma 0.54 m, the ladder's "fallen" (standing ~0.75). GPU check: 84 % of random-action episodes now end within 50 steps.
+
+### Grandma g3 (2026-11-09 21:58 UTC, 200M, `grandma/launch.sh g3`): floor + fall height, from scratch
+- Eval length 39 → 64 → 422 → 694 (10/21/32M), tracking_lin 39 → 808. Reward peaked +1.2 at 32M, then 0.0 / −0.6 / −0.6 (43/53/64M). Stopped at 64M.
+- **43M checkpoint: first Grandma policy through the toddler tier** (stand 10/10, push standing 10/10, push walking 10/10, non-foot contact 0). But child 0/10 and the gait is violent: velocity error 1.85 m/s on a stand command, foot force p99 20–26 BW (Matt m20: 1.1–2.0), jerk 0.22 (m20 0.007).
+- Why (`grandma/diag_policy.py`, the 43M policy in the GPU env): 71 % of living steps are net negative and floored to 0. `contact_force` −12.7 per step against +4.1 from every positive term, then `torso_ang_acc` −2.7. With the floor those costs carry no gradient, so nothing taught her to soften.
+- Fix 3 (g4): `contact_force` −0.01 → −0.001 and `alive` 1 → 5 (floor and fall height kept). On the same 43M policy: floored steps 71 % → 26 %.
+
+### Grandma g4 (2026-11-09 22:26 UTC, 150M, restored from g3 @ 42.6M): softer contact cost, alive 5
+- Eval reward 10.9 → 11.0 → 9.8 → 9.4 (0/16/24/40M), length 593 → 528. Stopped at ~40M. 24M checkpoint: toddler stand 2/10 (push standing / walking 10/10), foot force p99 65–76 BW (worse than g3's 20–26), velocity error 2.3 m/s on a stand command, jerk 0.25. A 10× cheaper contact cost let her stomp harder; alive 5 paid for staying up at any cost.
+- Checks that ruled things out: the foot-force sensor reads the true floor force (`grandma/diag_foot_force.py`: median 0.53 BW, p99 2.7 holding the pose; Matt 0.52 / 1.6); knees not torque-saturated in the reset crouch (75 / 125 N·m; her kp 189 lets the crouch sag 0.5 → 0.9 rad in 0.2 s, Matt 0.75); raw action rate similar (1.89 vs m20 1.31). Healthy reference, Matt m20 in his env: contact_force −0.29 / step, torso_ang_acc −0.04, 2–5 % floored steps.
+
+### Grandma g5 probe (2026-11-09 22:53 UTC, 32M, from g3 @ 42.6M): full contact cost, no floor, alive 15, action_rate −0.1
+- Result (34M, 16 min, reward 18.6): **the stomping is gone.** Ladder: foot force 0.7–1.8 BW (g4: 65–76), jerk 0.009–0.015 and hf 0.017 (both smoother than Matt m20's 0.007 / 0.05–0.11). But toddler 0/10 x3: 240–440 non-foot floor contacts. She kneels or props on a hand with the pelvis above 0.54 m, which the fall-height rule doesn't catch.
+- Fix 4, `low_body_height` (matt/env.py `_get_termination`): a knee, elbow, wrist or torso body origin under it ends the episode. Default 0 = off (Matt unchanged); Grandma 0.15 m (standing knee ~0.42). Check (`diag_policy.py`): g5's episodes now end at ~102 steps, g3 @ 43M (standing) unaffected at 394 / 400.
+
+### Grandma g6 (2026-11-09 23:16 UTC, 100M, from g5): g5's recipe + low-body termination
+- Eval reward 13 → 39 (16M) → 64 (22M) → 106 (43M) → 117 (103M); eval length 65 → 225 → 325. Ladder: 16M toddler 2 / 2 / 3 of 10; 32M 3 / 4 / 2; 54M 9 / 5 / 5 (stand jerk 0.007, 1.07 BW: Matt m20's standing quality); final 102.7M **stand 10 s 10/10** (err 0.038, jerk 0.009, 1.04 BW, non-foot 0), push standing 4/10, push walking 6/10. Graduation 0/100 (err 0.917, 0 NaN): she stands but doesn't walk on command yet; alive 15 outweighs the tracking reward.
+
+### Grandma g7 (2026-11-09 23:56 UTC, 150M, from g6): same recipe; PPO losses now logged (train.py log_training_metrics)
+- Eval reward 116 → 140 (32M) → 132 (48M) → 96–111 at the end (152.5M). 48M: toddler stand 10/10, push standing 6/10, **push walking 10/10** (jerk 0.009, 1.04 BW). Final 152.5M: stand **0/10** (non-foot 406: falls while standing), push standing 0/10, push walking 10/10; graduation 0/100 (err 0.850, 0 NaN). Standing regressed after 48M: keep the best checkpoint, not the last.
+- Reward breakdown (final policy, `diag_policy.py`): every cost is now at Matt m20's scale (contact_force −0.22 / step, torso −0.04, 0 % floored steps). But alive 15 is 15 of ~19 positive per step; speed tracking 1.35 of 3.0.
+- PPO losses: logged as episode/policy_loss, v_loss, entropy_loss, total_loss (brax log_training_metrics; tb_dump.py now keeps them).
+
+### Grandma g8 (2026-11-10 00:57 UTC, 150M, from g7 @ 48.2M): alive 15 → 3 (walking pays)
+- **Collapsed**: eval length 431 → 144 → 81 → 79 (0/8/16/24M), reward 36 → 4.8; training episode length 77 → 52. 24M checkpoint: toddler 0/10 x3 (falls). A 5× cut in the alive bonus rescaled every return at once; the critic's values were suddenly wrong and the policy fell apart. Stopped at ~26M.
+
+### Grandma g9 (2026-11-10 01:11 UTC, 120M, from g7 @ 48.2M): alive 15 → 8, lr 3e-4 → 1e-4 (Matt's recipe lr)
+- Stable (no collapse): eval length 429 → 280–310, reward 79 → 53–60. Ladder 19M / 38M / 45M / 51M: stand 9 / 9 / 9 / 9, push standing 5 / 2 / 4 / 5, push walking 10 / 9 / 9 / 10. Graduation @ 38M 0/100 (err 0.915).
+- Why she doesn't graduate (`diag_policy.py` with a fixed 0.8 m/s command, no pushes): **forward speed 0.02 m/s**. She stands still under a walk command. Standing keeps the alive bonus and part of the tracking credit, while trying to walk risks a fall that forfeits the alive stream: a sticky local optimum (Matt learned to walk with alive 1 from the start). Stopped at ~51M.
+
+### Grandma g10 (2026-11-10 01:36 UTC, 120M, from g9 @ 38.3M): tracking_lin_vel_wide 1 → 4, alive 8 → 5, lr 1e-4
+- **She walks**: forward speed under a fixed 0.8 m/s command (no pushes) 0.02 m/s (g9) → 0.32 (19M) → 0.50 m/s (57.5M; p10 / p90 0.26 / 0.79). Graduation error 0.915 → 0.619 at 57.5M (still 0/100). Ladder walking error 0.49 → 0.44 → 0.34 → 0.31 (19 / 38 / 57.5M).
+- Cost: she falls more. Eval length ~150–190; on a zero command she holds still (0.01 m/s) but falls in about half the 8 s probes; stand 10 s 8 → 0 → 2 / 10.
+- Final (121.4M, reward 40): **graduation 2/100, mean err 0.384** (g9: 0/100, 0.915). Ladder walking error 0.27 / 0.22 / 0.21 at 77 / 96 / 115M; push walking 8 / 9 / **10**/10; stand 0/10 throughout (falls holding still).
+- Why standing fails (`diag_policy.py`, zero command): `stand_still` costs **−6.6 per step** (Matt m20: −0.5). The stock term is the summed joint distance from the default crouch (knees 0.5 rad) whenever the command is zero; her softer gains can't hold that crouch (it sags to 0.9 rad in the PD test). It also fires at the start of every episode while the command ramps up from zero.
+
+### Grandma g11 (2026-11-10 02:25 UTC, 100M, from g10 final): stand_still −2 → −0.5
+- Ladder 16 / 32 / 49 / 65M: stand 6 / 8 / 9 / 10, push standing 5 / 8 / 7 / 7, push walking 9 / 10 / 10 / 10, walking error 0.24 → 0.16. Graduation @ 32M 3/100 (err 0.340).
+- **81.1M: Grandma's first full toddler tier pass**: stand 10/10, push standing 10/10, push walking 10/10, non-foot contact 0, jerk 0.011, foot force 1.16 BW. Child tier (walk 0.4 / 0.8 / 1.2 m/s) 0/10: err 0.249 (gate 0.2), stance symmetry 0.213 (gate 0.05: a limp), foot force 5.4 BW (gate 3.0).
+- 97.3M: toddler 10/10 x3 again; child 0/10 (err 0.257, sym 0.209, 4.96 BW). Final 102.7M: stand 9/10, push standing 9/10, push walking 10/10; **graduation 27/100, err 0.283** (32M: 3/100). Kept `final/grandma_g11_toddler_params.pkl` (the 81.1M toddler pass) as the candidate; no ONNX (not graduated).
+
+### Grandma g12 (2026-11-10 03:09 UTC, 70M, from g11 final): gait_symmetry −1.5 → −4.5 (the child gate's stance symmetry)
+- 18.8M: toddler 10/10 x3, child 0/10 with stance symmetry 0.225: the 3× symmetry weight doesn't move it.
+- **Root cause candidate: her skeleton is not left/right symmetric** (Matt's is exactly mirrored). `grandma_porace.xml` body positions: hip joint lateral offset L 8.9 / R 10.4 cm, height below pelvis L 7.6 / R 8.1 cm; thigh (hip → knee) L 29.2 / R 27.6 cm; feet in the reset pose +11.5 / −12.9 cm from the pelvis centre. A built-in leg-length discrepancy and an off-centre stance: a body that limps, so the child gate's stance-symmetry check (< 0.05) can't be met by reward weights. Fix (proposed, not done tonight): symmetrise her rig in the Blender → MJCF pipeline as Matt's is (tools/blender/grandma_rig.py / matt_mjcf.py --creature grandma), then re-flatten for Unity, re-check parity and retrain her policy (a body-physics change touches only her own policies).
+- 37.7M: toddler 10/10 x3 (jerk 0.009, 1.09 BW), child 0/10 (err 0.233, sym 0.205); **graduation 52/100, err 0.249** (g11 final 27/100).
+
+### Grandma g13 (2026-11-10 ~03:36 UTC, 150M budget, from g12 final): same recipe, the session's last run
+- g12 final (71.6M): toddler 10/10 x3 (jerk 0.009, 1.06 BW), child 0/10 (err 0.210, sym 0.197, 4.65 BW); **graduation 71/100, err 0.232**. Best Grandma policy: `final/grandma_g12_grad71_params.pkl` (candidate; no ONNX until graduation ≥ 90 and the child tier).
+- 24.1M: toddler 10/10 x3, child 0/10 (err **0.183**, under the 0.2 gate for the first time; sym 0.167; 5.1 BW); **graduation 84/100** (err 0.252). 48.2M: 78/100 (0.244). 72.3M: toddler 9 / 9 / 10, graduation 75/100 (0.324): plateau, stopped at ~74M. Kept `final/grandma_g13_grad84_params.pkl`.
+
+### Grandma g14 (2026-11-10 04:16–04:40 UTC, 53M, from g13 @ 24.1M): fine-tune at lr 5e-5 — **GRADUATED**
+- **Graduation 94/100 (err 0.197, 0 NaN); fresh seeds 100–199: 91/100 (err 0.201) — PASS on both.** Toddler 10/10 x3 (stand jerk 0.008, 1.02 BW; push standing 1.30 BW). Child 0/10: err 0.182 (passes), stance symmetry 0.181 (gate 0.05; her asymmetric skeleton, above), walking foot force 5.0 BW (gate 3.0).
+- Exported `training/final/grandma_g14.onnx` (obs 103 / act 29, opset 17, onnx-vs-numpy 5.1e-6) + `final/grandma_g14_grad94_params.pkl` + `final/grandma_g14_tags.json` (physics 5e79c99044f02ace, interface 265293b4b0b21c42). **Not deployed** to Assets/Policies and her creature card stays raceable = 0: Unity replay parity (< 1e-4) and the owner's go come first, as for Matt m20.
+- Recipe that worked (g14, on top of grandma/launch.sh): positive_reward False, fall_height 0.54, low_body_height 0.15, alive 5, action_rate −0.1, tracking_lin_vel_wide 4, stand_still −0.5, gait_symmetry −4.5, lr 5e-5 (1e-4 before), restored along g3 → g5 → g6 → g7 → g9 → g10 → g11 → g12 → g13 → g14 (~690M steps of her training in all).
+- Session report: docs/report/training_8h_20261109.html (training/report_8h.py).

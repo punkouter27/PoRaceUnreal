@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>PoRace — 16-Player Bracket &amp; Professional Main Menu UI Report (2026-11-09)</title>
+  <style>
+    body {
+      background: #0b0f17;
+      color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0;
+      padding: 32px;
+    }
+    h1 {
+      color: #f2c71a;
+      margin-top: 0;
+      font-size: 28px;
+      letter-spacing: 0.5px;
+    }
+    .meta {
+      color: #94a3b8;
+      margin-bottom: 24px;
+      font-size: 14px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin-bottom: 32px;
+    }
+    .card {
+      background: #131a27;
+      border: 1px solid #26334d;
+      border-radius: 8px;
+      padding: 18px;
+    }
+    .card h2 {
+      margin-top: 0;
+      font-size: 18px;
+      color: #38bdf8;
+    }
+    .card img {
+      width: 100%;
+      border-radius: 6px;
+      border: 1px solid #1e293b;
+      margin-top: 8px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #131a27;
+      border: 1px solid #26334d;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    th, td {
+      padding: 12px 16px;
+      text-align: left;
+      border-bottom: 1px solid #1e293b;
+      font-size: 14px;
+    }
+    th {
+      background: #1a2436;
+      color: #f2c71a;
+    }
+    .pass {
+      color: #4ade80;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <h1>PoRace — Main Menu &amp; 16-Player Symmetric Bracket UI Upgrade</h1>
+  <div class="meta">Build Stamp: <code>v0.1.0 261109</code> &middot; Resolution Tested: <code>1280&times;720</code> (16:9 Desktop) &amp; <code>720&times;1280</code> (Portrait) &middot; TextScale Gate: <span class="pass">0 under 11pt, 0 overflowing</span></div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Before (720&times;1280 Match-Width Scaler Broken in 1280&times;720 Window)</h2>
+      <p>Canvas height collapsed to 405 virtual units in landscape windows, causing severe text collisions (<code>Colour-blind colours: off</code> over <code>RACERS 1 &middot; 16-SLOT BRACKET</code>, <code>PoRace</code> behind <code>Matt</code>/<code>Grandma</code>) and clipping the 16-player bracket and action buttons off-screen.</p>
+      <img src="menu_16p/menu_16p_before.jpg" alt="Before UI Screenshot" />
+    </div>
+    <div class="card">
+      <h2>After (1v1 16-Player Bracket + 16-At-A-Time All-Trained Race)</h2>
+      <p>4 non-overlapping broadcast bands with the 1v1 16-player symmetric tournament bracket (8 Left slots, 8 Right slots, single Champion in the center) plus dedicated launch buttons for <strong>1v1 Bracket</strong>, <strong>16-At-A-Time Race (All Existing Trained Players)</strong>, and <strong>Quick Race</strong>.</p>
+      <img src="menu_16p/menu_1v1_and_16p_after_00_1s.png" alt="After UI Screenshot" />
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Check / Subsystem</th>
+        <th>Before</th>
+        <th>After</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Canvas Scaling (16:9 &amp; 9:16)</td>
+        <td><code>MatchWidthOrHeight = 0</code> (cropped vertically to 405u on 16:9)</td>
+        <td><code>ScreenMatchMode.Expand</code> (full 1280u height on all aspect ratios)</td>
+        <td class="pass">PASS</td>
+      </tr>
+      <tr>
+        <td>16-Player Bracket Visibility</td>
+        <td>Hidden behind clipped bottom button</td>
+        <td>Always visible on Main Menu center stage (8 Left R16, 8 Right R16, Center Winner)</td>
+        <td class="pass">PASS</td>
+      </tr>
+      <tr>
+        <td>16 Character Slots &amp; ELO</td>
+        <td>Only showed <code>—</code> on BYE slots</td>
+        <td>All 16 slots populated with trained racers + named BYE placeholders (<code>G.ma</code>, <code>Agent04..16</code>) &amp; ELO</td>
+        <td class="pass">PASS</td>
+      </tr>
+      <tr>
+        <td>TextScale &amp; UiSelfTest Audit</td>
+        <td>Multiple overlapping labels &amp; clipped buttons</td>
+        <td>63 labels, 0 under 11 pt, 0 overflowing; <code>[UiSelfTest] Menu: ok</code></td>
+        <td class="pass">PASS</td>
+      </tr>
+    </tbody>
+  </table>
+</body>
+</html>

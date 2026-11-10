@@ -1,0 +1,294 @@
+<title>PoRace Training Status</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a race-programme sheet. Summary strip, one lane per agent with its level ladder, then charts, timeline, decisions. */
+:root{
+  --bg:#f3f5f7; --panel:#ffffff; --ink:#15202b; --muted:#5a6878; --line:#d9dee5;
+  --accent:#0b6e70; --accent-soft:#d6ecec;
+  --pass:#1d7a46; --part:#b36b00; --none:#9aa5b1; --fail:#b3261e;
+  --display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body:"Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --mono:"JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#10161c; --panel:#18212a; --ink:#e7edf3; --muted:#9aa8b6; --line:#2a3642;
+  --accent:#4fc2c0; --accent-soft:#16393b; --pass:#4cc386; --part:#f0a640; --none:#5b6773; --fail:#f2867d; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#10161c; --panel:#18212a; --ink:#e7edf3; --muted:#9aa8b6; --line:#2a3642;
+  --accent:#4fc2c0; --accent-soft:#16393b; --pass:#4cc386; --part:#f0a640; --none:#5b6773; --fail:#f2867d; color-scheme:dark}
+body{background:var(--bg);color:var(--ink);font:16px/1.55 var(--body);
+  padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));padding-block:28px 48px}
+main{max-width:1040px;margin:0 auto;display:grid;gap:36px}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;margin:0;line-height:1.15}
+h1{font-size:clamp(28px,4.5vw,40px);font-weight:800;letter-spacing:-.01em}
+h2{font-size:22px;font-weight:600}
+h3{font-size:18px;font-weight:600}
+p{margin:0;max-width:68ch;color:var(--muted)}
+b,strong{color:var(--ink)}
+.eyebrow{font:600 12px/1 var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+header{display:grid;gap:10px}
+.stamp{font:400 13px var(--mono);color:var(--muted)}
+section{display:grid;gap:14px}
+
+/* summary strip */
+.strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.fact{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;display:grid;gap:4px;min-width:0}
+.fact .k{font:600 12px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.fact .v{font:800 22px/1.2 var(--display)}
+.fact p{font-size:14px}
+
+/* agent lanes */
+.lanes{display:grid;gap:12px}
+.lane{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1.4fr);gap:18px;align-items:start}
+@media (max-width:720px){.lane{grid-template-columns:1fr}}
+.who{display:grid;gap:6px;min-width:0}
+.who .tag{justify-self:start;font:600 12px var(--mono);padding:3px 9px;border-radius:999px;border:1px solid currentColor}
+.tag.pass{color:var(--pass)} .tag.part{color:var(--part)} .tag.none{color:var(--muted)} .tag.live{color:var(--accent)}
+.who p{font-size:15px}
+.ladder{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}
+.rung{border-radius:8px;padding:10px;display:grid;gap:4px;border:1px solid var(--line);min-width:0}
+.rung .lvl{font:600 12px var(--mono);letter-spacing:.05em;text-transform:uppercase}
+.rung .st{font:700 15px var(--display)}
+.rung .d{font-size:13px;color:var(--muted)}
+.rung.pass{background:color-mix(in srgb,var(--pass) 14%,var(--panel));border-color:color-mix(in srgb,var(--pass) 45%,var(--line))}
+.rung.pass .st{color:var(--pass)}
+.rung.part{background:color-mix(in srgb,var(--part) 14%,var(--panel));border-color:color-mix(in srgb,var(--part) 45%,var(--line))}
+.rung.part .st{color:var(--part)}
+.rung.none .st{color:var(--muted)}
+.rung.fail .st{color:var(--fail)}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:14px;color:var(--muted)}
+.legend span::before{content:"";display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px;background:var(--c)}
+
+/* charts */
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px}
+figure{margin:0;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;display:grid;gap:8px;min-width:0}
+figcaption{display:grid;gap:4px}
+figcaption .q{font:700 16px var(--display)}
+figcaption p{font-size:14px}
+.chart{width:100%;height:auto;display:block}
+.chart .grid{stroke:var(--line);stroke-width:1}
+.chart .lbl{fill:var(--muted);font:11px var(--mono)}
+.chart .line{fill:none;stroke:var(--accent);stroke-width:2.2}
+.chart .area{fill:var(--accent-soft)}
+.chart .ref{stroke:var(--part);stroke-dasharray:4 4;stroke-width:1.5}
+.chart .reflbl{fill:var(--part);font:600 11px var(--mono)}
+.chart .dot{fill:var(--accent)}
+.read{font:600 14px var(--mono);color:var(--ink)}
+
+/* timeline */
+.timeline{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;overflow-x:auto}
+.tl{min-width:640px;display:grid;gap:8px}
+.tlrow{display:grid;grid-template-columns:150px 1fr;gap:10px;align-items:center;font-size:14px}
+.tlrow .name{color:var(--ink);font-weight:700}
+.track{position:relative;height:26px;background:color-mix(in srgb,var(--line) 45%,transparent);border-radius:6px}
+.bar{position:absolute;top:3px;height:20px;border-radius:5px;font:600 11px/20px var(--mono);padding:0 6px;white-space:nowrap;overflow:hidden;color:#fff}
+.bar.gpu{background:var(--accent)} .bar.cpu{background:var(--part)} .bar.done{background:var(--pass)} .bar.maybe{background:transparent;border:1.5px dashed var(--accent);color:var(--accent);line-height:17px}
+.ticks{display:grid;grid-template-columns:150px 1fr;gap:10px;font:11px var(--mono);color:var(--muted)}
+.ticks div:last-child{display:flex;justify-content:space-between}
+.now{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--fail)}
+
+/* decisions */
+.decide{display:grid;gap:10px;counter-reset:d}
+.choice{background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--rank);border-radius:8px;padding:12px 14px;display:grid;gap:4px}
+.choice h3{font-size:17px}
+.choice p{font-size:15px}
+.mono{font-family:var(--mono);font-size:.92em}
+footer p{font-size:13px}
+@media (prefers-reduced-motion:no-preference){.bar{transition:width .3s}}
+</style>
+
+<main>
+<header>
+  <div class="eyebrow">Training status · hourly update</div>
+  <h1>Who can do what, and what to train next</h1>
+  <p>A plain-language snapshot of every racer's training level on the RTX 2060 PC, the three signals to watch on the run that's going now, and when each job should finish.</p>
+  <div class="stamp">Mon 9 Nov 2026 · updated 23:55 · GPU: free (training session over)</div>
+</header>
+
+<section aria-labelledby="glance">
+  <h2 id="glance">At a glance</h2>
+  <div class="strip">
+    <div class="fact"><span class="k">Racing now</span><span class="v">Dog and Matt</span><p>Both race with graduated policies. Grandma has graduated too; she joins the races after the Unity check and your go.</p></div>
+    <div class="fact"><span class="k">Training now</span><span class="v">Grandma, run 1 failed</span><p>Finished 16:30. She learned to fall over on purpose: each try ends in under 4 steps (0.07 s).</p></div>
+    <div class="fact"><span class="k">Matt's jog attempt (m25)</span><span class="v">Didn't work</span><p>Faster steps alone made him limp and fall at jogging speed. m20 keeps racing.</p></div>
+    <div class="fact"><span class="k">Now</span><span class="v">Grandma graduated: 94/100</span><p>Run 14 (a gentle fine-tune of run 13's best) passes the race test: 94/100 (90 needed), and 91/100 on 100 fresh, never-seen courses. Toddler tier 10/10 on all three tests. Her racing brain is exported but not yet in the game: first a check that Unity's physics plays her exactly as training did, then your go. Still open: the Child tier (she limps because her skeleton is lopsided, and lands at 5× body weight, limit 3).</p></div>
+  </div>
+</section>
+
+<section aria-labelledby="levels">
+  <h2 id="levels">Training level of each agent</h2>
+  <p>Every human racer climbs the same three-tier ladder: <b>Toddler</b> (stand and survive a shove), <b>Child</b> (walk smoothly at three speeds) and <b>Adult</b> (fast, turning and uphill). The dog's rungs are its own, mapped onto the same three levels.</p>
+  <div class="legend">
+    <span style="--c:var(--pass)">Passed</span><span style="--c:var(--part)">Partly passed</span><span style="--c:var(--none)">Not reached</span>
+  </div>
+  <div class="lanes">
+
+    <article class="lane">
+      <div class="who">
+        <h3>Blue, the robot dog (Go2)</h3>
+        <span class="tag pass">Races every map</span>
+        <p>The only dog left on the roster. Walks, survives shoves and falling cubes, gets back up after a fall, takes banked turns, and clears steeplechase hurdles.</p>
+      </div>
+      <div class="ladder">
+        <div class="rung pass"><span class="lvl">Toddler</span><span class="st">Passed</span><span class="d">Stands 10/10, survives 30 N·s shoves 10/10, gets up 9/10 within 3 s</span></div>
+        <div class="rung pass"><span class="lvl">Child</span><span class="st">Passed</span><span class="d">Tracks race speeds within 0.2 m/s, 9–10 out of 10</span></div>
+        <div class="rung part"><span class="lvl">Adult</span><span class="st">Partly</span><span class="d">Banked turns pass. Steeplechase 82/100, under the 90 gate. A faster 2.5 m/s brain is trained but not in races.</span></div>
+      </div>
+    </article>
+
+    <article class="lane">
+      <div class="who">
+        <h3>Matt, shipped brain (m20)</h3>
+        <span class="tag pass">Races flat maps</span>
+        <p>Graduated 98 of 100 race episodes. Walks naturally and turns well, but can't jog or climb: those were never in his training.</p>
+      </div>
+      <div class="ladder">
+        <div class="rung pass"><span class="lvl">Toddler</span><span class="st">Passed</span><span class="d">Stand 10/10, shove while standing 10/10, shove while walking 10/10</span></div>
+        <div class="rung pass"><span class="lvl">Child</span><span class="st">Passed</span><span class="d">Walk 0.5 / 1.0 / 1.5 m/s: 10/10, even left and right steps</span></div>
+        <div class="rung part"><span class="lvl">Adult</span><span class="st">Partly</span><span class="d">Turning 10/10. Jog at 2.5 m/s 0/10, 10% uphill 0/10</span></div>
+      </div>
+    </article>
+
+    <article class="lane">
+      <div class="who">
+        <h3>Matt, jog attempt (m25)</h3>
+        <span class="tag part">Finished · not shipped</span>
+        <p>Same Matt, given faster steps at high speed and commands up to 2.8 m/s. It picked up a slight limp and falls at 2.5 m/s, where m20 stays up. m20 stays in the races.</p>
+      </div>
+      <div class="ladder">
+        <div class="rung pass"><span class="lvl">Toddler</span><span class="st">Passed</span><span class="d">Stand and both shove tests 10/10</span></div>
+        <div class="rung fail"><span class="lvl">Child</span><span class="st">Failed</span><span class="d">2/10: left and right steps uneven (0.068, limit 0.05)</span></div>
+        <div class="rung fail"><span class="lvl">Adult</span><span class="st">Worse</span><span class="d">Jog 2.5 m/s: falls 10/10 (m20 stays up, too slow)</span></div>
+      </div>
+    </article>
+
+    <article class="lane">
+      <div class="who">
+        <h3>Grandma (new character)</h3>
+        <span class="tag pass">Graduated (race 94/100) · Child open</span>
+        <p>Rigged, scaled to 1.58 m and 72 kg, physics body checked: no self-collision at rest or at any joint limit. Her personality card: unhurried (up to 1.3 m/s), short quick steps, careful, steady, saves her strength.</p>
+      </div>
+      <div class="ladder">
+        <div class="rung pass"><span class="lvl">Toddler</span><span class="st">Passed (run 11)</span><span class="d">Stand 10/10, pushes 10/10 · 10/10, smooth</span></div>
+        <div class="rung part"><span class="lvl">Child</span><span class="st">0/10, in training</span><span class="d">Limps (0.21, need 0.05): lopsided skeleton, needs a body fix. Speed OK; race test 94/100 (graduated)</span></div>
+        <div class="rung none"><span class="lvl">Adult</span><span class="st">Not started</span><span class="d">Brisk 1.3 m/s, turn, 10% uphill</span></div>
+      </div>
+    </article>
+
+    <article class="lane">
+      <div class="who">
+        <h3>G1 humanoid robot (testbed)</h3>
+        <span class="tag none">Parked</span>
+        <p>A Unitree G1 body sits in its own test scene with no policy. It waits on a decision about its collision shapes before any training.</p>
+      </div>
+      <div class="ladder">
+        <div class="rung none"><span class="lvl">Toddler</span><span class="st">–</span><span class="d">No policy</span></div>
+        <div class="rung none"><span class="lvl">Child</span><span class="st">–</span><span class="d"></span></div>
+        <div class="rung none"><span class="lvl">Adult</span><span class="st">–</span><span class="d"></span></div>
+      </div>
+    </article>
+  </div>
+</section>
+
+<section aria-labelledby="metrics">
+  <h2 id="metrics">The three signals on today's run (m25)</h2>
+  <p>TensorBoard logs dozens of numbers; these three tell the story. Each point is a test of 128 fresh episodes, taken every 10.6 million practice steps. The dashed line marks where the run started, which is m20's own score on the new, harder task.</p>
+  <div class="charts">
+    <figure>
+      <figcaption><span class="q">Overall score</span><p>Everything the trainer rewards, added up. A climbing line means he's learning.</p></figcaption>
+      <svg class="chart" id="c1" viewBox="0 0 340 200" role="img" aria-label="Eval episode reward from 60.5 at the start to 57.8 at 149 million steps"></svg>
+      <div class="read">Start 60.5 → now 57.8. Dipped, then recovered, but no gain.</div>
+    </figure>
+    <figure>
+      <figcaption><span class="q">Time on his feet</span><p>Out of 1,000 steps per test episode, how long he stays up. 1,000 means never falls.</p></figcaption>
+      <svg class="chart" id="c2" viewBox="0 0 340 200" role="img" aria-label="Average episode length steady between 799 and 885 of 1000"></svg>
+      <div class="read">About 870 of 1,000, steady. The fastest commands still trip him.</div>
+    </figure>
+    <figure>
+      <figcaption><span class="q">Hitting the speed he's told</span><p>The reward for matching the commanded speed. This is the jog skill we want.</p></figcaption>
+      <svg class="chart" id="c3" viewBox="0 0 340 200" role="img" aria-label="Linear velocity tracking from 1518 at the start to 1320 at 149 million steps"></svg>
+      <div class="read">Start 1,518 → now 1,320. Slightly worse at following speed.</div>
+    </figure>
+  </div>
+  <p><b>What it means:</b> the run lasted 202 million steps; the score only climbed in the last 20 minutes (62.5 at the end), and the ladder test confirmed no real gain. He passes the race test (95/100) but limps slightly and falls at 2.5 m/s. Running needs a moment with both feet off the ground, and his training never rewards that. That's the change to make if you want Matt to jog.</p>
+</section>
+
+<section aria-labelledby="when">
+  <h2 id="when">When things finish</h2>
+  <p>Estimated from this PC's measured speed: about 45,000 practice steps per second, so roughly one hour per 150-million-step run. The GPU runs one training job at a time; tests run on the CPU alongside it.</p>
+  <div class="timeline">
+    <div class="tl" id="tl"></div>
+  </div>
+  <p>Grandma's run 1 failed in the known way Matt's early runs did (m2–m4): when standing earns less than falling, the policy falls. Once the scoring is fixed, 3–5 runs is still a fair guess: <b>roughly 5–7 GPU hours</b>, so racing tomorrow evening at the earliest.</p>
+</section>
+
+<section aria-labelledby="next">
+  <h2 id="next">What to train next: my recommendation</h2>
+  <div class="decide">
+    <div class="choice" style="--rank:var(--accent)"><h3>1 · Grandma's walk (Toddler → Child)</h3><p>She's the only new racer and can't race until she graduates. All GPU time after m25 goes to her. Each run is about 80 minutes, with a ladder test after each one.</p></div>
+    <div class="choice" style="--rank:var(--part)"><h3>2 · Matt's jog, only if m25 shows promise</h3><p>If the ladder shows jogging still at 0/10, stop here and keep m20. The next real step is a reward for a flight phase (both feet briefly off the ground), which is a bigger design change.</p></div>
+    <div class="choice" style="--rank:var(--none)"><h3>3 · Blue's steeplechase and speed (later)</h3><p>Blue already races everywhere. Two optional polish items: lift steeplechase from 82 to 90 out of 100, and check the 2.5 m/s brain in Unity so Blue can run faster against the humans.</p></div>
+    <div class="choice" style="--rank:var(--none)"><h3>Hold · G1 humanoid</h3><p>No training until you decide how its collision shapes should work. Grandma and Matt already cover the human racers.</p></div>
+  </div>
+</section>
+
+<footer>
+  <p>Sources: TensorBoard logs in <span class="mono">training/runs/m25/tb</span> and <span class="mono">training/runs/g1/tb</span>, CPU ladder results in <span class="mono">docs/matt/ladder_m20_r3.json</span>, run history in <span class="mono">rl_optimization_log.md</span>. Next update when Grandma's run 2 starts or in an hour, whichever comes first.</p>
+</footer>
+</main>
+
+<script>
+const steps=[0,10.6,21.3,31.9,42.6,53.2,63.9,74.5,85.2,95.8,106.5,117.1,127.8,138.4,149.1];
+const series={
+  c1:{y:[60.5,53.3,45.2,56.9,49.1,48.5,46.5,53.4,56.1,54.8,55.2,47.1,50.4,52.1,57.8],lo:40,hi:65,ticks:[40,50,60]},
+  c2:{y:[873,870,799,865,851,845,885,885,846,852,859,878,847,834,872],lo:750,hi:1000,ticks:[750,875,1000]},
+  c3:{y:[1518,1314,1169,1377,1297,1270,1271,1215,1318,1319,1396,1184,1271,1334,1320],lo:1100,hi:1600,ticks:[1100,1350,1600]}
+};
+const W=340,H=200,L=44,R=12,T=12,B=30,xmax=152.5;
+const sx=v=>L+(v/xmax)*(W-L-R), sy=(v,s)=>T+(1-(v-s.lo)/(s.hi-s.lo))*(H-T-B);
+for(const id in series){
+  const s=series[id], g=document.getElementById(id); let h="";
+  for(const t of s.ticks){const y=sy(t,s);h+=`<line class="grid" x1="${L}" x2="${W-R}" y1="${y}" y2="${y}"/><text class="lbl" x="${L-6}" y="${y+4}" text-anchor="end">${t}</text>`;}
+  for(const m of [0,50,100,150]){h+=`<text class="lbl" x="${sx(m)}" y="${H-10}" text-anchor="middle">${m}M</text>`;}
+  const pts=s.y.map((v,i)=>[sx(steps[i]),sy(v,s)]);
+  const line=pts.map(p=>p.join(",")).join(" ");
+  h+=`<polygon class="area" points="${sx(0)},${sy(s.lo,s)} ${line} ${sx(steps[steps.length-1])},${sy(s.lo,s)}"/>`;
+  const ry=sy(s.y[0],s);
+  h+=`<line class="ref" x1="${L}" x2="${W-R}" y1="${ry}" y2="${ry}"/><text class="reflbl" x="${W-R}" y="${ry-5}" text-anchor="end">start</text>`;
+  h+=`<polyline class="line" points="${line}"/>`;
+  const e=pts[pts.length-1]; h+=`<circle class="dot" cx="${e[0]}" cy="${e[1]}" r="4"/>`;
+  g.innerHTML=h;
+}
+// timeline: hours from 14:00 to 24:00
+const t0=14,t1=24, pct=h=>((h-t0)/(t1-t0)*100).toFixed(2)+"%";
+const rows=[
+  ["Matt m25",[[14.12,15.35,"done","done: not shipped"]]],
+  ["m25 grading",[[15.36,15.5,"done","graded"]]],
+  ["Grandma run 1",[[15.4,16.5,"done","failed: falls at once"]]],
+  ["Reward diagnosis",[[16.45,16.6,"done","found: foot penalty"]]],
+  ["Grandma run 2",[[16.6,16.95,"done","stopped: sat on floor"]]],
+  ["Grandma run 3",[[17.0,17.45,"done","stood ~70%, then slipped"]]],
+  ["Grandma run 4",[[17.45,17.8,"done","stomped harder: stopped"]]],
+  ["Grandma run 5 probe",[[17.88,18.2,"done","smooth, but kneels"]]],
+  ["Grandma run 6",[[18.27,18.92,"done","stands smoothly"]]],
+  ["Grandma run 7",[[18.95,19.9,"done","walk pushes 10/10, stand lost"]]],
+  ["Grandma run 8",[[19.95,20.17,"done","collapsed: stopped"]]],
+  ["Grandma run 9",[[20.18,20.6,"done","stable, but won't walk"]]],
+  ["Grandma run 10",[[20.6,21.4,"done","walks! but can't stand"]]],
+  ["Grandma run 11",[[21.42,22.1,"done","Toddler PASSED"]]],
+  ["Grandma run 12",[[22.15,22.6,"done","race test 71/100"]]],
+  ["Grandma run 13",[[22.6,23.25,"done","84/100 at 24M, then slipped"]]],
+  ["Grandma run 14",[[23.27,23.67,"done","GRADUATED 94/100"]]],
+  ["Unity check, body fix",[[23.75,24.0,"maybe","your call"]]],
+];
+const now=23.92;
+let tl=`<div class="ticks"><div></div><div>${[14,16,18,20,22,24].map(h=>`<span>${h}:00</span>`).join("")}</div></div>`;
+for(const [name,bars] of rows){
+  tl+=`<div class="tlrow"><div class="name">${name}</div><div class="track">`;
+  for(const [a,b,k,txt] of bars) tl+=`<div class="bar ${k}" style="left:${pct(a)};width:calc(${pct(b)} - ${pct(a)})" title="${txt}">${txt}</div>`;
+  tl+=`<div class="now" style="left:${pct(now)}" aria-hidden="true"></div></div></div>`;
+}
+document.getElementById("tl").innerHTML=tl;
+</script>

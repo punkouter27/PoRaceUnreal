@@ -1,0 +1,33 @@
+# Unreal
+Binaries/
+Intermediate/
+Saved/
+DerivedDataCache/
+Build/
+.vs/
+*.sln
+*.slnx
+Plugins/*/Binaries/
+Plugins/*/Intermediate/
+Logs/
+
+# URLab clone (local changes are kept in Plugins/urlab_porace.patch)
+Plugins/UnrealRoboticsLab/
+# URLab writes per-import material instances on every import
+Content/MuJoCoImports/
+
+# Python / training
+__pycache__/
+*.pyc
+.venv/
+training/runs/
+training/checkpoints/
+training/logs/
+MUJOCO_LOG.TXT
+
+# Blender backups
+*.blend1
+
+# Web
+Web/node_modules/
+Web/dist/

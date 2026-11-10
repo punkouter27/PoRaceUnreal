@@ -1,0 +1,288 @@
+"""Pass-bar evaluation on CPU MuJoCo with the exported numpy policy (same math as the ONNX).
+
+  python eval.py --rung r0 --params runs/r1/params.pkl        # stand 10 s, zero command, 10 seeds
+  python eval.py --rung r1 --params runs/r1/params.pkl        # velocity tracking error < 0.2 m/s, 10 seeds
+  python eval.py --rung r2 --params runs/r2/params.pkl        # 30 N.s push + 1 kg cube drop, 9/10 seeds
+  python eval.py --rung r3 --params runs/r3/params.pkl        # getup: standing within 3 s from fallen, 9/10 seeds
+  python eval.py --rung bank --params runs/r5/params.pkl      # 15 deg slope, straight + circling, 9/10 seeds
+  python eval.py --rung steeple --params runs/s1/params.pkl --seeds 100   # obstacle field, graduation gate 90/100
+"""
+import argparse
+
+import mujoco
+import numpy as np
+from brax.io import model as brax_model
+
+from export_onnx import policy_from_params
+from go2 import constants as C
+
+Q, V = slice(7, C.NQ_ROBOT), slice(6, C.NV_ROBOT)
+
+
+class Sim:
+  def __init__(self, params, env, xml=None):
+    self.policy = policy_from_params(params)
+    self.env = env
+    self.m = mujoco.MjModel.from_xml_path(str(xml or C.SCENE_XML))
+    self.d = mujoco.MjData(self.m)
+    self.imu = self.m.site(C.IMU_SITE).id
+    self.adr = {s: self.m.sensor_adr[self.m.sensor(s).id] for s in [C.GYRO_SENSOR, C.LOCAL_LINVEL_SENSOR, C.UPVECTOR_SENSOR]}
+    self.base = self.m.body(C.ROOT_BODY).id
+    self.default = np.array(C.DEFAULT_POSE, np.float32)
+
+  def sensor(self, s, n=3):
+    return self.d.sensordata[self.adr[s]:self.adr[s] + n]
+
+  def reset(self, rng, fallen=False):
+    mujoco.mj_resetDataKeyframe(self.m, self.d, 0)
+    if fallen:
+      self.d.qpos[2] = 0.5
+      q = rng.normal(size=4); self.d.qpos[3:7] = q / np.linalg.norm(q)
+      self.d.qpos[Q] = rng.uniform(self.m.jnt_range[1:13, 0], self.m.jnt_range[1:13, 1])
+    self.d.ctrl[:] = self.d.qpos[Q]
+    mujoco.mj_forward(self.m, self.d)
+    if fallen:
+      for _ in range(int(0.5 / C.SIM_DT)):
+        mujoco.mj_step(self.m, self.d)
+    self.last_act = np.zeros(C.NU, np.float32)
+    self.cmd_f = np.zeros(3, np.float32)
+
+  def control_step(self, cmd):
+    if cmd is not None:  # slew-limited command, identical to Unity Go2Controller
+      self.cmd_f = self.cmd_f + np.clip(np.asarray(cmd, np.float32) - self.cmd_f, -C.CMD_SLEW_STEP, C.CMD_SLEW_STEP)
+      cmd = self.cmd_f
+    gravity = self.d.site_xmat[self.imu].reshape(3, 3).T @ np.array([0, 0, -1.0])
+    if self.env == "joystick":
+      obs = np.concatenate([self.sensor(C.LOCAL_LINVEL_SENSOR), self.sensor(C.GYRO_SENSOR), gravity, self.d.qpos[Q] - self.default,
+                            self.d.qvel[V], self.last_act, cmd])
+      base = self.default
+    else:
+      obs = np.concatenate([self.sensor(C.GYRO_SENSOR), gravity, self.d.qpos[Q] - self.default, self.d.qvel[V], self.last_act])
+      base = self.d.qpos[Q]
+    act = np.clip(self.policy(obs.astype(np.float32)), -1, 1).astype(np.float32)
+    self.d.ctrl[:] = (base + C.ACTION_SCALE * act).astype(np.float32)
+    for _ in range(C.DECIMATION):
+      mujoco.mj_step(self.m, self.d)
+    self.last_act = act
+
+  def upright(self):
+    return self.sensor(C.UPVECTOR_SENSOR)[2] > 0
+
+  def push(self, impulse, rng):
+    ang = rng.uniform(0, 2 * np.pi); n = 25  # 0.1 s
+    self.d.xfrc_applied[self.base, :3] = np.array([np.cos(ang), np.sin(ang), 0]) * impulse / (n * C.SIM_DT)
+    self._push_steps = n
+
+  def tilt_floor(self, deg, downhill_az):
+    """Real slope: rotate the floor plane (through the origin) so it falls toward azimuth downhill_az. Unlike training
+    (tilted gravity), the obs keep world z, as in Unity. Parked cubes would end up inside the plane, so their
+    contacts are switched off."""
+    a = np.deg2rad(deg); axis = np.array([-np.sin(downhill_az), np.cos(downhill_az), 0.0])
+    q = np.zeros(4); mujoco.mju_axisAngle2Quat(q, axis, a)
+    # Recompile: static world-geom poses are fixed at compile time, so editing m.geom_quat afterwards does nothing.
+    spec = mujoco.MjSpec.from_file(str(C.SCENE_XML))
+    spec.geom("floor").quat = q
+    for b in C.CUBE_BODIES:
+      for g in spec.body(b).geoms: g.contype = g.conaffinity = 0
+    self.m = spec.compile(); self.d = mujoco.MjData(self.m); self.floor_q = q
+
+  def stand_on_floor(self):
+    """After reset on a tilted floor: rotate the home pose onto the slope (feet on the plane, as a dog arriving on it
+    would be) instead of starting level with the uphill feet inside the floor."""
+    R = np.zeros(9); mujoco.mju_quat2Mat(R, self.floor_q)
+    self.d.qpos[0:3] = R.reshape(3, 3) @ self.d.qpos[0:3]
+    q = np.zeros(4); mujoco.mju_mulQuat(q, self.floor_q, self.d.qpos[3:7].copy()); self.d.qpos[3:7] = q
+    mujoco.mj_forward(self.m, self.d)
+
+  def drop_cube(self, k):
+    q = C.NQ_ROBOT + 7 * k
+    self.d.qpos[q:q + 3] = self.d.qpos[0:3] + [0, 0, 1.0]
+    self.d.qpos[q + 3:q + 7] = [1, 0, 0, 0]
+    self.d.qvel[C.NV_ROBOT + 6 * k:C.NV_ROBOT + 6 * k + 6] = 0
+
+
+def run(rung, params, seeds):
+  env = "getup" if rung == "r3" else "joystick"
+  sim = Sim(params, env)
+  passes = 0; details = []
+  for seed in range(seeds):
+    rng = np.random.default_rng(seed)
+    if rung == "r0":
+      sim.reset(rng); ok = True
+      for k in range(int(10 / C.CTRL_DT)):
+        sim.control_step(np.zeros(3, np.float32)); ok &= sim.upright()
+      details.append(f"seed {seed}: {'upright' if ok else 'FELL'} z={sim.d.qpos[2]:.3f}")
+    elif rung == "r1":
+      # Randomized per seed: joint offsets at start, a 1.5 m/s command from standstill, then 4 random commands.
+      sim.reset(rng); errs = []; ok = True
+      sim.d.qpos[Q] += rng.uniform(-0.1, 0.1, 12); mujoco.mj_forward(sim.m, sim.d)
+      cmds = [[1.5, 0, 0]] + [[rng.uniform(-1.0, 1.5), rng.uniform(-0.6, 0.6), rng.uniform(-1.0, 1.0)] for _ in range(4)]
+      for cmd in cmds:
+        cmd = np.array(cmd, np.float32)
+        for k in range(int(3 / C.CTRL_DT)):
+          sim.control_step(cmd); ok &= sim.upright()
+          if k >= int(1 / C.CTRL_DT):  # after 1 s transient
+            v = sim.sensor(C.LOCAL_LINVEL_SENSOR); w = sim.sensor(C.GYRO_SENSOR)
+            errs.append(np.linalg.norm([v[0] - cmd[0], v[1] - cmd[1], 0.5 * (w[2] - cmd[2])]))
+      e = float(np.mean(errs)); e0 = float(np.mean(errs[:100])); ok &= e < 0.2
+      details.append(f"seed {seed}: mean vel err {e:.3f} (1.5 m/s from standstill: {e0:.3f}) {'OK' if ok else 'FAIL'}")
+    elif rung == "r2":
+      sim.reset(rng); ok = True; cmd = np.array([0.5, 0, 0], np.float32)
+      for k in range(int(8 / C.CTRL_DT)):
+        if k == int(2 / C.CTRL_DT): sim.push(30.0, rng)
+        if k == int(5 / C.CTRL_DT): sim.drop_cube(0)
+        sim.control_step(cmd)
+        if getattr(sim, "_push_steps", 0) > 0:  # clear AFTER stepping: 25 physics steps = the full 30 N.s
+          sim._push_steps -= C.DECIMATION
+          if sim._push_steps <= 0: sim.d.xfrc_applied[:] = 0
+        if k > int(2.5 / C.CTRL_DT): ok &= sim.upright()
+      details.append(f"seed {seed}: {'survived' if ok else 'FELL'}")
+    elif rung == "speed":
+      # F.9 faster dog: from standstill (joint offsets as R1), 2.0 m/s for 5 s, then 2.5 m/s for 5 s. Pass: upright and
+      # mean forward speed over the last 3 s of each at least 90 % of the command (the old freeze stood still here).
+      sim.reset(rng); ok = True; got = []
+      sim.d.qpos[Q] += rng.uniform(-0.1, 0.1, 12); mujoco.mj_forward(sim.m, sim.d)
+      for vx_cmd in (2.0, 2.5):
+        cmd = np.array([vx_cmd, 0, 0], np.float32); vs = []
+        for k in range(int(5 / C.CTRL_DT)):
+          sim.control_step(cmd); ok &= sim.upright()
+          if k >= int(2 / C.CTRL_DT): vs.append(sim.sensor(C.LOCAL_LINVEL_SENSOR)[0])
+        got.append(float(np.mean(vs))); ok &= got[-1] >= 0.9 * vx_cmd
+      details.append(f"seed {seed}: 2.0 -> {got[0]:.2f}, 2.5 -> {got[1]:.2f} m/s {'OK' if ok else 'FAIL'}")
+    else:  # r3
+      sim.reset(rng, fallen=True); ok = False; t_up = None
+      for k in range(int(5 / C.CTRL_DT)):
+        sim.control_step(None)
+        if sim.upright() and sim.d.qpos[2] > 0.22 and t_up is None: t_up = k * C.CTRL_DT
+      ok = t_up is not None and t_up <= 3.0 and sim.upright()
+      details.append(f"seed {seed}: {'up at %.2fs' % t_up if t_up is not None else 'never up'} {'OK' if ok else 'FAIL'}")
+    passes += ok
+  need = {"r0": seeds, "r1": seeds, "r2": int(0.9 * seeds), "r3": int(0.9 * seeds), "speed": int(0.9 * seeds)}[rung]
+  print("\n".join(details))
+  print(f"{rung.upper()}: {passes}/{seeds} passed (need {need}) -> {'PASS' if passes >= need else 'FAIL'}")
+  return passes >= need
+
+
+def run_crowd_getup(getup_params, seeds):
+  """Getup while being knocked about: fallen start, then a 30 N.s push at 0.6 s and another at 1.6 s.
+  Pass: upright with base above 0.22 m within 5 s and still upright at 7 s. Bar 90 %."""
+  sim = Sim(getup_params, "getup"); passes = 0
+  for seed in range(seeds):
+    rng = np.random.default_rng(seed); sim.reset(rng, fallen=True); t_up = None; steps = 0
+    for k in range(int(7 / C.CTRL_DT)):
+      if k in (int(0.6 / C.CTRL_DT), int(1.6 / C.CTRL_DT)): sim.push(30.0, rng); steps = 25
+      sim.control_step(None)
+      if steps > 0:
+        steps -= C.DECIMATION
+        if steps <= 0: sim.d.xfrc_applied[:] = 0
+      if sim.upright() and sim.d.qpos[2] > 0.22 and t_up is None and k > int(1.8 / C.CTRL_DT): t_up = k * C.CTRL_DT
+    ok = t_up is not None and t_up <= 5.0 and sim.upright() and sim.d.qpos[2] > 0.2
+    print(f"seed {seed}: {'up at %.2fs' % t_up if t_up is not None else 'never up'} {'OK' if ok else 'FAIL'}"); passes += ok
+  need = int(0.9 * seeds)
+  print(f"CROWD-GETUP: {passes}/{seeds} passed (need {need}) -> {'PASS' if passes >= need else 'FAIL'}")
+  return passes >= need
+
+
+def run_bank(loco_params, seeds, deg=15.0):
+  """Banked track (F.8): floor tilted deg in a random direction. 1.5 m/s straight, then 1.0 m/s with yaw 0.8 rad/s
+  (a full circle sweeps every heading relative to the slope), then 1.5 m/s straight; 3 s each.
+  Pass: upright throughout and mean tracking error < 0.3 m/s after each 1 s transient. Bar 90 %."""
+  passes = 0
+  for seed in range(seeds):
+    rng = np.random.default_rng(seed); sim = Sim(loco_params, "joystick")
+    sim.tilt_floor(deg, rng.uniform(0, 2 * np.pi)); sim.reset(rng); sim.stand_on_floor(); errs = []; ok = True
+    for cmd in ([1.5, 0, 0], [1.0, 0, 0.8], [1.5, 0, 0]):
+      cmd = np.array(cmd, np.float32)
+      for k in range(int(3 / C.CTRL_DT)):
+        sim.control_step(cmd); ok &= sim.upright()
+        if k >= int(1 / C.CTRL_DT):
+          v = sim.sensor(C.LOCAL_LINVEL_SENSOR); w = sim.sensor(C.GYRO_SENSOR)
+          errs.append(np.linalg.norm([v[0] - cmd[0], v[1] - cmd[1], 0.5 * (w[2] - cmd[2])]))
+    e = float(np.mean(errs)); ok &= e < 0.3
+    print(f"seed {seed}: {deg:.0f} deg bank, mean vel err {e:.3f} {'OK' if ok else 'FAIL'}"); passes += ok
+  need = int(0.9 * seeds)
+  print(f"BANK {deg:.0f}: {passes}/{seeds} passed (need {need}) -> {'PASS' if passes >= need else 'FAIL'}")
+  return passes >= need
+
+
+def run_steeple(loco_params, seeds, first=0):
+  """Obstacle field (make_steeple.py, Map 04). Spawn anywhere in the field like training (dropped from 10 cm above
+  home height), random heading: 1.0 m/s straight, 0.8 m/s with yaw 0.6 rad/s, 1.3 m/s straight; 4 s each.
+  Pass: upright throughout, no NaN, mean tracking error < 0.35 m/s after each 1 s transient.
+  Graduation gate (CLAUDE.md): 100 consecutive episodes, >= 90 % pass, zero NaN."""
+  passes = 0; nans = 0; errs_all = []
+  sim = Sim(loco_params, "joystick", C.ASSET_PATH / "scene_steeple.xml")
+  for seed in range(first, first + seeds):
+    rng = np.random.default_rng(seed); sim.reset(rng)
+    sim.d.qpos[0:2] = rng.uniform(-12, 12, 2); sim.d.qpos[2] += 0.1
+    yaw = rng.uniform(-np.pi, np.pi); sim.d.qpos[3:7] = [np.cos(yaw / 2), 0, 0, np.sin(yaw / 2)]
+    mujoco.mj_forward(sim.m, sim.d); errs = []; ok = True
+    for cmd in ([1.0, 0, 0], [0.8, 0, 0.6], [1.3, 0, 0]):
+      cmd = np.array(cmd, np.float32)
+      for k in range(int(4 / C.CTRL_DT)):
+        sim.control_step(cmd); ok &= sim.upright()
+        if k >= int(1 / C.CTRL_DT):
+          v = sim.sensor(C.LOCAL_LINVEL_SENSOR); w = sim.sensor(C.GYRO_SENSOR)
+          errs.append(np.linalg.norm([v[0] - cmd[0], v[1] - cmd[1], 0.5 * (w[2] - cmd[2])]))
+    bad = bool(np.isnan(sim.d.qpos).any()); nans += bad
+    e = float(np.nan_to_num(np.mean(errs), nan=9.0)); ok &= e < 0.35 and not bad; errs_all.append(e)
+    print(f"seed {seed}: start ({sim.d.qpos[0]:.1f},{sim.d.qpos[1]:.1f}) mean vel err {e:.3f} {'OK' if ok else 'FAIL'}", flush=True); passes += ok
+  need = int(np.ceil(0.9 * seeds))
+  print(f"STEEPLE: {passes}/{seeds} passed (need {need}), mean err {np.mean(errs_all):.3f}, NaN episodes {nans} -> "
+        f"{'PASS' if passes >= need and nans == 0 else 'FAIL'}")
+  return passes >= need and nans == 0
+
+
+def run_combo(loco_params, getup_params, seeds):
+  """Walk at 0.5 m/s, get flipped onto a random fallen pose at 2 s, stand up with the getup policy, switch back
+  (same rule as Unity: Getup when upvector z < 0, Locomotion after 0.5 s with z > 0.9) and walk again.
+  Pass: back in Locomotion within 5 s of the flip and mean forward speed > 0.3 m/s over the last 2 s of 10 s."""
+  sim = Sim(loco_params, "joystick"); getup = policy_from_params(getup_params); loco = sim.policy
+  passes = 0; cmd = np.array([0.5, 0, 0], np.float32)
+  for seed in range(seeds):
+    rng = np.random.default_rng(seed); sim.reset(rng); sim.env, sim.policy = "joystick", loco
+    active = "loco"; upright_for = 0.0; t_back = None; vx = []
+    for k in range(int(10 / C.CTRL_DT)):
+      t = k * C.CTRL_DT
+      if k == int(2 / C.CTRL_DT):
+        while True:  # resample until the body z axis points clearly downward-ish, so it really falls
+          q = rng.normal(size=4); q /= np.linalg.norm(q)
+          if 1 - 2 * (q[1] ** 2 + q[2] ** 2) < -0.2: break
+        sim.d.qpos[3:7] = q; sim.d.qpos[2] = 0.5
+        sim.d.qpos[Q] = rng.uniform(sim.m.jnt_range[1:13, 0], sim.m.jnt_range[1:13, 1]); sim.d.qvel[:C.NV_ROBOT] = 0
+        mujoco.mj_forward(sim.m, sim.d)
+      up = sim.sensor(C.UPVECTOR_SENSOR)[2]
+      upright_for = upright_for + C.CTRL_DT if up > 0.9 else 0.0
+      if active == "loco" and up < 0: active = "getup"; sim.last_act[:] = 0; sim.cmd_f[:] = 0
+      elif active == "getup" and upright_for > 0.5:
+        active = "loco"; sim.last_act[:] = 0
+        if t > 2 and t_back is None: t_back = t - 2
+      sim.env, sim.policy = ("joystick", loco) if active == "loco" else ("getup", getup)
+      sim.control_step(cmd)
+      if t >= 8: vx.append(sim.sensor(C.LOCAL_LINVEL_SENSOR)[0])
+    v = float(np.mean(vx)); ok = t_back is not None and t_back <= 5.0 and v > 0.3 and sim.upright() and active == "loco"
+    print(f"seed {seed}: back to walking after {t_back if t_back is None else round(t_back, 2)} s, final speed {v:.2f} m/s {'OK' if ok else 'FAIL'}")
+    passes += ok
+  need = int(0.9 * seeds)
+  print(f"COMBO: {passes}/{seeds} passed (need {need}) -> {'PASS' if passes >= need else 'FAIL'}")
+  return passes >= need
+
+
+if __name__ == "__main__":
+  ap = argparse.ArgumentParser()
+  ap.add_argument("--rung", choices=["r0", "r1", "r2", "r3", "speed", "combo", "crowd", "bank", "steeple"], required=True)
+  ap.add_argument("--getup_params")
+  ap.add_argument("--params", required=True)
+  ap.add_argument("--seeds", type=int, default=10)
+  ap.add_argument("--first_seed", type=int, default=0, help="steeple: first seed (held-out sets: 100, 200)")
+  ap.add_argument("--deg", type=float, default=15.0, help="bank: slope in degrees")
+  a = ap.parse_args()
+  if a.rung == "bank":
+    raise SystemExit(0 if run_bank(brax_model.load_params(a.params), a.seeds, a.deg) else 1)
+  if a.rung == "steeple":
+    raise SystemExit(0 if run_steeple(brax_model.load_params(a.params), a.seeds, a.first_seed) else 1)
+  if a.rung == "crowd":
+    raise SystemExit(0 if run_crowd_getup(brax_model.load_params(a.params), a.seeds) else 1)
+  if a.rung == "combo":
+    raise SystemExit(0 if run_combo(brax_model.load_params(a.params), brax_model.load_params(a.getup_params), a.seeds) else 1)
+  raise SystemExit(0 if run(a.rung, brax_model.load_params(a.params), a.seeds) else 1)

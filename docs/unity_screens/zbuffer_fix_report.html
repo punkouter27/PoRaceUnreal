@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>PoRace — Track Z-Buffer Flickering (Z-Fighting) Fix Report (2026-11-09)</title>
+  <style>
+    body {
+      background: #0b0f17;
+      color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      margin: 0;
+      padding: 32px;
+    }
+    h1 {
+      color: #f2c71a;
+      margin-top: 0;
+      font-size: 28px;
+    }
+    .meta {
+      color: #94a3b8;
+      margin-bottom: 24px;
+      font-size: 14px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin-bottom: 32px;
+    }
+    .card {
+      background: #131a27;
+      border: 1px solid #26334d;
+      border-radius: 8px;
+      padding: 18px;
+    }
+    .card h2 {
+      margin-top: 0;
+      font-size: 18px;
+      color: #38bdf8;
+    }
+    .card img {
+      width: 100%;
+      border-radius: 6px;
+      border: 1px solid #1e293b;
+      margin-top: 8px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #131a27;
+      border: 1px solid #26334d;
+      border-radius: 8px;
+      overflow: hidden;
+    }
+    th, td {
+      padding: 12px 16px;
+      text-align: left;
+      border-bottom: 1px solid #1e293b;
+      font-size: 14px;
+    }
+    th {
+      background: #1a2436;
+      color: #f2c71a;
+    }
+    .pass {
+      color: #4ade80;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <h1>PoRace — Track Z-Buffer Flickering (Z-Fighting) Fix Report</h1>
+  <div class="meta">Build Stamp: <code>v0.1.0 261109</code> &middot; Headless Blender: <code>Blender 5.2.3 LTS</code> &middot; Physics Parity: <span class="pass">100% Bit-Identical (MjGeom Untouched)</span></div>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Before (Coplanar Tiles, Floor Plane &amp; Clipped Markings)</h2>
+      <p>Notice the yellow 25 m / 50 m / 75 m checkpoint lines ahead of Matt sliced in half by depth-buffer Z-fighting against the <code>y = 0.000 m</code> floor plane and <code>y = -0.002 m</code> tiles, plus 12 cm overlapping tile seams every 5 m.</p>
+      <img src="zbuffer_fix/track_zbuffer_before_00_5.5s.png" alt="Before Track Z-Buffer Fix" />
+    </div>
+    <div class="card">
+      <h2>After (Seamless Mitered Track Ribbon, Lowered Floor Visual &amp; Raised Markings)</h2>
+      <p>All yellow checkpoint lines (25 m, 50 m, 75 m) and the start line render unbroken end-to-end across the track; adjacent 5 m alternating bands share exact boundary vertices with 0.000 m overlap.</p>
+      <img src="zbuffer_fix/track_zbuffer_after_00_5.5s.png" alt="After Track Z-Buffer Fix" />
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Z-Fighting Source</th>
+        <th>Root Cause (Before)</th>
+        <th>Resolution (After)</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><code>go2_scene/floor</code> vs Track</td>
+        <td>Visual floor mesh at <code>y = 0.000 m</code> fought with tiles (top <code>y = -0.002 m</code>) and bank inner edge (<code>y = 0.000 m</code>)</td>
+        <td>Lowered visual floor mesh vertices to <code>y = -0.035 m</code> (physics <code>MjGeom</code> plane stays at <code>z = 0.000 m</code>)</td>
+        <td class="pass">FIXED</td>
+      </tr>
+      <tr>
+        <td><code>tile_{i}_{t}</code> 5m Seams &amp; Turns</td>
+        <td>Each 5 m cube had <code>+0.12 m</code> length overlap at identical <code>y = -0.012 m</code> with alternating <code>TrackA</code> / <code>TrackB</code> colors</td>
+        <td>Built mitered 2-submesh ribbon (<code>tools/blender/track_meshes.py</code> &amp; <code>TrackZBufferFix</code>) with <code>0.000 m</code> overlap</td>
+        <td class="pass">FIXED</td>
+      </tr>
+      <tr>
+        <td><code>start_line</code> &amp; <code>mark_*</code> Lines</td>
+        <td>Top face at <code>y = 0.000 m</code> (coplanar with floor and 2 mm from tiles), causing lines to slice and flicker</td>
+        <td>Raised to <code>surfaceHeight + 0.007..0.009 m</code> with <code>4 mm</code> slab thickness and shadow casting disabled</td>
+        <td class="pass">FIXED</td>
+      </tr>
+      <tr>
+        <td><code>rail_L*</code> / <code>rail_R*</code> Joints</td>
+        <td>Adjacent rail boxes overlapped by <code>12 cm</code> with identical height and width</td>
+        <td>Inset odd rail visual meshes by <code>~1.5 mm</code> while keeping <code>MjGeom</code> collision extents identical</td>
+        <td class="pass">FIXED</td>
+      </tr>
+      <tr>
+        <td>Trackside Grandstands &amp; Barriers</td>
+        <td><code>tier0..2</code> and <code>wall</code> shared coplanar side walls (<code>x = &plusmn;3.0 m</code>) and risers in Blender</td>
+        <td>Stepped tier widths/depths in <code>tools/blender/trackside_props.py</code> (re-baked in headless Blender 5.2) + runtime de-overlap</td>
+        <td class="pass">FIXED</td>
+      </tr>
+    </tbody>
+  </table>
+</body>
+</html>

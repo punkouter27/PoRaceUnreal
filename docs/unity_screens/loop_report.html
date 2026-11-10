@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Game Loop Fixes</title>
+<style>
+  :root { --bg: #f6f7f9; --fg: #1b1e24; --muted: #5d6470; --card: #fff; --line: #dfe2e7; --mark: #e8590c; --ok: #2b8a3e; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #14161b; --fg: #e8eaee; --muted: #9aa1ad; --card: #1d2027; --line: #2c3039; --mark: #ff8a3d; --ok: #51cf66; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { font-size: 24px; margin: 0 0 4px; } h2 { font-size: 18px; margin: 32px 0 12px; }
+  p.sub { color: var(--muted); margin: 0 0 16px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+  figure { margin: 0; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+  figcaption { font-weight: 600; margin-bottom: 8px; } figcaption span { display: block; font-weight: 400; color: var(--muted); font-size: 13px; }
+  figure.before figcaption::before { content: "Before · "; color: var(--mark); } figure.after figcaption::before { content: "After · "; color: var(--ok); }
+  .shot { position: relative; } .shot img { width: 100%; display: block; border-radius: 6px; }
+  .box { position: absolute; border: 3px solid var(--mark); border-radius: 6px; } .after .box { border-color: var(--ok); }
+  table { border-collapse: collapse; width: 100%; background: var(--card); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; } th { font-size: 13px; color: var(--muted); }
+  code { font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Game loop: menu → intro → race → results → OK → menu</h1>
+  <p class="sub">2026-11-09 · Windows player, 540×960 captures via ShotProbe (-gfx mobile). No policy touched; -raceTest races are bit-identical to the previous build.</p>
+
+  <h2>Start: the menu</h2>
+  <div class="grid">
+    <figure class="before"><figcaption>Plain launch<span>Autoplay skipped the menu. Grandma (not racing) stood on the grid; the season panel named Gold, a removed dog.</span></figcaption>
+      <div class="shot"><img src="loop_before/launch.png" alt="Plain launch went straight into a race"><div class="box" style="left:22%;top:40%;width:24%;height:42%"></div><div class="box" style="left:53%;top:88%;width:46%;height:9%"></div></div></figure>
+    <figure class="before"><figcaption>Menu (with -menu)<span>"grid 4" with two racers possible; no Grandma chip.</span></figcaption>
+      <div class="shot"><img src="loop_before/menu.png" alt="Menu before"><div class="box" style="left:20%;top:29%;width:60%;height:3.5%"></div><div class="box" style="left:3%;top:38%;width:40%;height:9%"></div></div></figure>
+    <figure class="after"><figcaption>Plain launch<span>Opens the menu (autoplay is now <code>-autoplay</code>). "up to 2 racers"; Grandma's chip says "in training" and a tap shows her card's reason.</span></figcaption>
+      <div class="shot"><img src="loop_after/launch.png" alt="Plain launch opens the menu"><div class="box" style="left:18%;top:29%;width:64%;height:3.5%"></div><div class="box" style="left:3%;top:38%;width:56%;height:9%"></div></div></figure>
+  </div>
+
+  <h2>Introduction of the racers</h2>
+  <div class="grid">
+    <figure class="before"><figcaption>Countdown<span>No introduction: the race opened on "3", the camera behind Matt and the off-grid Grandma.</span></figcaption>
+      <div class="shot"><img src="loop_before/countdown.png" alt="Countdown before"><div class="box" style="left:18%;top:36%;width:66%;height:50%"></div></div></figure>
+    <figure class="after"><figcaption>Title card<span>Map, length, terrain, field size.</span></figcaption>
+      <div class="shot"><img src="loop_after/intro_title.png" alt="Intro title card"><div class="box" style="left:5%;top:11%;width:90%;height:13%"></div></div></figure>
+    <figure class="after"><figcaption>Racer 1 of 2<span>Camera in front; name in its colour, creature, height, pace. SKIP ends the intro.</span></figcaption>
+      <div class="shot"><img src="loop_after/intro_blue.png" alt="Intro card for Blue"><div class="box" style="left:2%;top:63.5%;width:96%;height:17.5%"></div></div></figure>
+    <figure class="after"><figcaption>Racer 2 of 2<span>Matt, front-lit: his skin's gloss scale 1 → 0.45 and a half-strength team rim.</span></figcaption>
+      <div class="shot"><img src="loop_after/intro_matt.png" alt="Intro card for Matt"><div class="box" style="left:2%;top:63.5%;width:96%;height:17.5%"></div></div></figure>
+  </div>
+
+  <h2>The race</h2>
+  <div class="grid">
+    <figure class="before"><figcaption>Trackside camera<span>Outside the rail: a grandstand filled half the frame.</span></figcaption>
+      <div class="shot"><img src="loop_before/trackside.png" alt="Trackside before"><div class="box" style="left:1%;top:3%;width:98%;height:42%"></div></div></figure>
+    <figure class="after"><figcaption>Trackside camera<span>Inside the far rail at eye level; cuts away 4 m before the racer reaches the lens.</span></figcaption>
+      <div class="shot"><img src="loop_after/trackside.png" alt="Trackside after"></div></figure>
+    <figure class="after"><figcaption>Leader camera, head-on<span>With a rival under 2.5 m behind, the leader shot looks head-on instead of sitting beside the chaser.</span></figcaption>
+      <div class="shot"><img src="loop_after/leader_headon.png" alt="Head-on leader shot"></div></figure>
+    <figure class="before"><figcaption>Split box<span>The PiP camera covered its right end ("+1.18 re…").</span></figcaption>
+      <div class="shot"><img src="loop_before/split.png" alt="Split box before"><div class="box" style="left:21%;top:35%;width:42%;height:6.5%"></div></div></figure>
+    <figure class="after"><figcaption>Split box<span>Moved to the left half, clear of the PiP.</span></figcaption>
+      <div class="shot"><img src="loop_after/split.png" alt="Split box after"><div class="box" style="left:0.5%;top:35%;width:60%;height:6.5%"></div></div></figure>
+  </div>
+
+  <h2>End: winner, stats, OK, and again</h2>
+  <div class="grid">
+    <figure class="before"><figcaption>Race stats<span>No OK: the screen stayed here for good. Split box ghosting through, empty lower half, HAZARD on top.</span></figcaption>
+      <div class="shot"><img src="loop_before/results.png" alt="Stats card before"><div class="box" style="left:1%;top:34.5%;width:98%;height:37%"></div></div></figure>
+    <figure class="after"><figcaption>Results<span>Declared winner, aligned columns (DNF rows when a race is called), sized to content, OK. HAZARD and split box hidden.</span></figcaption>
+      <div class="shot"><img src="loop_after/results.png" alt="Results card after"><div class="box" style="left:24%;top:36%;width:52%;height:5.5%"></div><div class="box" style="left:31%;top:55.5%;width:38%;height:6.5%"></div></div></figure>
+    <figure class="after"><figcaption>OK → main menu<span>Back on the menu (-autoOk capture).</span></figcaption>
+      <div class="shot"><img src="loop_after/menu_again.png" alt="Menu after OK"></div></figure>
+    <figure class="after"><figcaption>…and race again<span>Second race of the same session.</span></figcaption>
+      <div class="shot"><img src="loop_after/race_again.png" alt="Second race"></div></figure>
+  </div>
+
+  <h2>Round 2: tournament, arcade attract mode, "Dog"</h2>
+  <div class="grid">
+    <figure class="after"><figcaption>Tournament bracket<span>16 slots, standard seeding (1 v 16, 8 v 9 …); empty slots are BYEs and advance their opponent. Next match highlighted.</span></figcaption>
+      <div class="shot"><img src="loop_after/bracket.png" alt="16-slot bracket with byes"><div class="box" style="left:1%;top:86%;width:93%;height:9%"></div></div></figure>
+    <figure class="after"><figcaption>Match intro<span>Title card names the round; hard cut to each racer (a glide passed through Matt on the oval).</span></figcaption>
+      <div class="shot"><img src="loop_after/intro_cut.png" alt="Intro hard cut on Matt"></div></figure>
+    <figure class="after"><figcaption>Final result<span>Results card titled by the round: "FINAL · CHAMPION Dog".</span></figcaption>
+      <div class="shot"><img src="loop_after/final_results.png" alt="Final results card"><div class="box" style="left:24%;top:35.5%;width:52%;height:6%"></div></div></figure>
+    <figure class="after"><figcaption>Champion<span>OK returns to the finished bracket: champion column, NEW TOURNAMENT.</span></figcaption>
+      <div class="shot"><img src="loop_after/champion.png" alt="Bracket with champion"><div class="box" style="left:79%;top:45%;width:20%;height:6%"></div></div></figure>
+    <figure class="after"><figcaption>Attract mode<span>Menu idle 30 s → demo races under a blinking "DEMO · PRESS ANY KEY" (TAP TO PLAY on touch). Any press → menu.</span></figcaption>
+      <div class="shot"><img src="loop_after/attract.png" alt="Demo race with attract banner"><div class="box" style="left:16%;top:24.5%;width:68%;height:5.5%"></div></div></figure>
+  </div>
+
+  <h2>All changes</h2>
+  <table>
+    <tr><th>#</th><th>Change</th><th>Where</th></tr>
+    <tr><td>1</td><td>OK on the results card → main menu (also ends autoplay)</td><td><code>RaceTelemetry.cs</code></td></tr>
+    <tr><td>2</td><td>Racer intro before the countdown (title + one card per racer, SKIP); grid holds as in the countdown; off in -raceTest, -noIntro, after Restart</td><td><code>RacerIntro.cs</code> (new), <code>MultiRaceOrchestrator.cs</code>, <code>PhaseBadge.cs</code>, <code>RaceAudio.cs</code></td></tr>
+    <tr><td>3</td><td>Plain launch opens the menu; self-running app is <code>-autoplay</code></td><td><code>MapDefinition.cs</code> (RaceConfig)</td></tr>
+    <tr><td>4</td><td>Off-grid humans' skins hidden</td><td><code>MultiRaceOrchestrator.cs</code></td></tr>
+    <tr><td>5</td><td>Season table / track record naming a racer no longer on the roster start over</td><td><code>SeasonMode.cs</code>, <code>GateTiming.cs</code></td></tr>
+    <tr><td>6</td><td>Grandma chip (locked with her card's reason until <code>raceable</code>)</td><td><code>MenuController.cs</code></td></tr>
+    <tr><td>7</td><td>"up to N racers" from the real roster</td><td><code>MenuController.cs</code></td></tr>
+    <tr><td>8–9</td><td>Trackside, finish and leader cameras inside the rails, head-on when chased</td><td><code>RaceDirector.cs</code></td></tr>
+    <tr><td>10–11</td><td>Split box clear of the PiP and hidden at the finish; HAZARD hidden outside racing</td><td><code>GateTiming.cs</code>, <code>HazardRadial.cs</code></td></tr>
+    <tr><td>12</td><td>Colour-blind toggle label 20 → 24 units (12 pt on 720p)</td><td><code>MenuController.cs</code></td></tr>
+    <tr><td>13</td><td>Matt's gloss scale 1 → 0.45 (≈5 % of the map's texels were mirror); human team rim × 0.45</td><td><code>Matt.mat</code>, <code>CreatureBuilder.cs</code>, <code>StrainMonitor.cs</code></td></tr>
+    <tr><td>14</td><td>Solo maps labelled "time trial" (menu, badge, results)</td><td><code>MenuController.cs</code>, <code>PhaseBadge.cs</code>, <code>RaceTelemetry.cs</code></td></tr>
+    <tr><td>+</td><td>Menu races are called 60 s after the winner (rest DNF), so the results always come up</td><td><code>MultiRaceOrchestrator.cs</code></td></tr>
+  </table>
+</main>
+</body>
+</html>

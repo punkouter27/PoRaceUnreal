@@ -1,0 +1,28 @@
+{
+  "globalHeaders": {
+    "Content-Security-Policy": "frame-ancestors 'self'",
+    "X-Content-Type-Options": "nosniff",
+    "Referrer-Policy": "strict-origin-when-cross-origin"
+  },
+  "mimeTypes": {
+    ".unityweb": "application/octet-stream",
+    ".data": "application/octet-stream",
+    ".wasm": "application/wasm",
+    ".symbols.json": "application/json"
+  },
+  "routes": [
+    {
+      "route": "/Build/*.unityweb",
+      "headers": {
+        "Content-Encoding": "gzip",
+        "Cache-Control": "no-cache"
+      }
+    },
+    {
+      "route": "/Build/*",
+      "headers": {
+        "Cache-Control": "no-cache"
+      }
+    }
+  ]
+}

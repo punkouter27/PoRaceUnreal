@@ -1,0 +1,173 @@
+"""Brax PPO on the Go2 envs (MuJoCo Warp). Mirrors mujoco_playground/learning/train_jax_ppo.py.
+
+  python train.py --env joystick --timesteps 200000000 --logdir runs/r1
+  python train.py --env joystick --pert --cubes --dr --restore runs/r1/checkpoints --logdir runs/r2
+  python train.py --env getup --logdir runs/r3
+  python train.py --env joystick --pert --cubes --dr --vx_max 2.5 --tilt_max 17 --restore_params final/go2_loco_params.pkl --logdir runs/r5
+Outputs: <logdir>/tb (TensorBoard), <logdir>/checkpoints/<step>, <logdir>/params.pkl (brax.io.model).
+"""
+import argparse
+import ast
+import functools
+import json
+import time
+from pathlib import Path
+
+import jax
+import jax.numpy as jnp
+import numpy as np
+
+# brax 0.14.2 still calls jax.device_put_replicated, removed in jax 0.11. Drop-in from the pmap migration guide.
+try:
+  jax.device_put_replicated
+except AttributeError:
+  def _device_put_replicated(x, devices):
+    sh = jax.sharding.NamedSharding(jax.sharding.Mesh(np.array(devices), ("d",)), jax.sharding.PartitionSpec("d"))
+    return jax.tree_util.tree_map(
+        lambda a: jax.device_put(jnp.broadcast_to(jnp.asarray(a), (len(devices),) + jnp.shape(a)), sh), x)
+  jax.device_put_replicated = _device_put_replicated
+
+from brax.io import model as brax_model
+from brax.training.agents.ppo import networks as ppo_networks
+from brax.training.agents.ppo import train as ppo
+from mujoco_playground import wrapper
+from mujoco_playground.config import locomotion_params
+from tensorboardX import SummaryWriter
+
+import preflight
+from g1 import env as g1env
+from matt import env as mattenv
+from grandma import env as grandmaenv
+from go2 import getup, joystick, randomize
+
+ENVS = {"joystick": (joystick.Joystick, joystick.default_config, "Go1JoystickFlatTerrain"),
+        "getup": (getup.Getup, getup.default_config, "Go1Getup"),
+        "g1": (g1env.G1Joystick, g1env.default_config, "G1JoystickFlatTerrain"),
+        "matt": (mattenv.MattJoystick, mattenv.default_config, "G1JoystickFlatTerrain"),
+        "grandma": (grandmaenv.GrandmaJoystick, grandmaenv.default_config, "G1JoystickFlatTerrain")}
+
+
+CONTACTS_PER_ENV = 30  # full-collision Go2 lying on the floor; fewer drops contacts and bodies sink
+
+
+def make_env(name, pert=False, cubes=False, num_worlds=8192, kick_max=None, vx_max=None, tilt_max=None, steeple=False, tweak=None):
+  cls, cfg_fn, _ = ENVS[name]
+  cfg = cfg_fn()
+  # naconmax is a TOTAL across worlds. Size it to the worlds this env instance really runs, otherwise the
+  # 128-world eval env allocates the same buffers as the training env and the 12 GB GPU spills or OOMs.
+  cfg.naconmax = {"g1": 8, "matt": mattenv.CONTACTS_PER_ENV, "grandma": grandmaenv.CONTACTS_PER_ENV}.get(name, CONTACTS_PER_ENV) * num_worlds   # G1: only feet collide; Matt: full self-collision
+  if name == "getup":
+    cfg.pert_config.enable = pert
+    cfg.cube_config.enable = cubes
+    if kick_max is not None: cfg.pert_config.velocity_kick = [0.0, float(kick_max)]
+  if name == "joystick":
+    cfg.pert_config.enable = pert
+    cfg.cube_config.enable = cubes
+    # Kick impulse = 0.318 * mass * velocity_kick (half-sine profile): the default 3 m/s is only ~14.5 N.s on the
+    # 15.2 kg Go2. The R2 bar is 30 N.s, which needs ~6.2 m/s; 7 gives margin.
+    if kick_max is not None: cfg.pert_config.velocity_kick = [0.0, float(kick_max)]
+    # Racing range: forward up to vx_max, reverse kept at 1 m/s (a fast reverse is never used in a race).
+    if vx_max is not None:
+      cfg.command_config.a = [float(vx_max), 0.8, 1.2]; cfg.command_config.lo = [-1.0, -0.8, -1.2]
+      cfg.reward_config.sigma_speed_scale = True   # see joystick.py: needed for commands the policy cannot reach yet
+    # Slopes up to tilt_max degrees in any direction (banked turns are ~15 degrees of cross-slope).
+    if tilt_max is not None:
+      cfg.tilt_config.enable = True; cfg.tilt_config.max_deg = float(tilt_max)
+    # Obstacle field (make_steeple.py): blind policy, same 48-dim obs. s1 (swing target 0.12, no progress term)
+    # learned to creep and then to stand still; s2 keeps the 0.10 swing target and adds the progress reward.
+    if steeple:
+      cfg.scene_xml = str(joystick.C.ASSET_PATH / "scene_steeple.xml"); cfg.terrain_config.enable = True
+      cfg.reward_config.scales.progress = 1.0
+  if tweak is not None: cfg = tweak(cfg)
+  return cls(config=cfg), cfg
+
+
+def main():
+  ap = argparse.ArgumentParser()
+  ap.add_argument("--env", choices=ENVS, default="joystick")
+  ap.add_argument("--timesteps", type=int, default=None)
+  ap.add_argument("--num_envs", type=int, default=None)
+  ap.add_argument("--seed", type=int, default=1)
+  ap.add_argument("--logdir", default=None)
+  ap.add_argument("--restore", default=None, help="checkpoint dir (latest step) or a specific step dir")
+  ap.add_argument("--restore_params", default=None, help="params.pkl (normalizer, policy, value) to start from, e.g. final/go2_loco_params.pkl")
+  ap.add_argument("--vx_max", type=float, default=None, help="max forward command in m/s (default 1.5)")
+  ap.add_argument("--tilt_max", type=float, default=None, help="train on slopes up to this many degrees (tilted gravity)")
+  ap.add_argument("--kick_max", type=float, default=None, help="max velocity kick in m/s (impulse = 0.318*mass*kick)")
+  ap.add_argument("--steeple", action="store_true", help="obstacle field scene (make_steeple.py)")
+  ap.add_argument("--pert", action="store_true"); ap.add_argument("--cubes", action="store_true"); ap.add_argument("--dr", action="store_true")
+  # Fine-tuning knobs (2026-10-27): s3 went NaN fine-tuning at the default 3e-4 from a converged policy.
+  ap.add_argument("--lr", type=float, default=None, help="PPO learning rate (default 3e-4)")
+  ap.add_argument("--entropy", type=float, default=None, help="PPO entropy cost (default 1e-2)")
+  ap.add_argument("--progress", type=float, default=None, help="progress reward weight (steeple default 1.0, else 0)")
+  ap.add_argument("--swing", type=float, default=None, help="swing foot height target in m (default 0.10)")
+  ap.add_argument("--p_outer", type=float, default=None, help="steeple: share of spawns on the full-height outer ring")
+  ap.add_argument("--cost_scale", type=float, default=None, help="scale the torque, energy and action-rate penalties (F.9: they grow with gait frequency)")
+  ap.add_argument("--no_sigma_scale", action="store_true", help="keep the sharp tracking sigma with --vx_max (the progress reward now supplies the gradient the speed-scaled sigma was added for)")
+  ap.add_argument("--set", action="append", default=[], metavar="KEY=VALUE",
+                  help="env config override, dotted key, Python literal value (repeatable), e.g. realism.action_delay_prob=0.5")
+  a = ap.parse_args()
+
+  ppo_params = locomotion_params.brax_ppo_config(ENVS[a.env][2])
+  if a.timesteps is not None: ppo_params.num_timesteps = a.timesteps
+  if a.num_envs is not None: ppo_params.num_envs = a.num_envs
+  if a.lr is not None: ppo_params.learning_rate = a.lr
+  if a.entropy is not None: ppo_params.entropy_cost = a.entropy
+  def tweak(cfg):
+    if a.progress is not None: cfg.reward_config.scales.progress = a.progress
+    if a.swing is not None: cfg.reward_config.max_foot_height = a.swing
+    if a.p_outer is not None: cfg.terrain_config.p_outer = a.p_outer
+    if a.no_sigma_scale: cfg.reward_config.sigma_speed_scale = False
+    if a.cost_scale is not None:
+      for k in ("torques", "energy", "action_rate"): cfg.reward_config.scales[k] *= a.cost_scale
+    for kv in a.set:
+      key, val = kv.split("=", 1); *path, leaf = key.split("."); node = cfg
+      for p in path: node = node[p]
+      node[leaf] = ast.literal_eval(val)
+    return cfg
+  env, cfg = make_env(a.env, a.pert, a.cubes, num_worlds=ppo_params.num_envs, kick_max=a.kick_max, vx_max=a.vx_max, tilt_max=a.tilt_max, steeple=a.steeple, tweak=tweak)
+  eval_env, _ = make_env(a.env, a.pert, a.cubes, num_worlds=ppo_params.get("num_eval_envs", 128), kick_max=a.kick_max, vx_max=a.vx_max, tilt_max=a.tilt_max, steeple=a.steeple, tweak=tweak)
+  logdir = Path(a.logdir or f"runs/{a.env}-{time.strftime('%Y%m%d-%H%M%S')}").resolve()
+  ckpt = logdir / "checkpoints"; ckpt.mkdir(parents=True, exist_ok=True)
+  (ckpt / "config.json").write_text(json.dumps(cfg.to_dict(), indent=1, default=str))
+  (logdir / "ppo_params.json").write_text(json.dumps(ppo_params.to_dict(), indent=1, default=str))
+  writer = SummaryWriter(str(logdir / "tb"))
+  preflight.check(env, cfg, logdir, a.restore_params)   # tags.json (interface + physics versions); stops on a mismatch
+
+  restore = None
+  if a.restore:
+    p = Path(a.restore)
+    steps = sorted([d for d in p.iterdir() if d.is_dir() and d.name.isdigit()], key=lambda d: int(d.name)) if p.is_dir() else []
+    restore = str((steps[-1] if steps else p).resolve())  # orbax requires an absolute path
+    print("restoring from", restore)
+
+  training_params = dict(ppo_params)
+  network_factory = functools.partial(ppo_networks.make_ppo_networks, **training_params.pop("network_factory"))
+  num_eval_envs = training_params.pop("num_eval_envs", 128)
+  for k in ("log_training_metrics", "training_metrics_steps"): training_params.pop(k, None)   # set below
+  if a.dr:
+    training_params["randomization_fn"] = randomize.domain_randomize
+  t0 = time.monotonic()
+
+  def progress(num_steps, metrics):
+    for k, v in metrics.items():
+      writer.add_scalar(k, float(v), num_steps)
+    writer.flush()
+    if "eval/episode_reward" not in metrics: return   # a training-loss row (log_training_metrics): TensorBoard only
+    r = metrics.get("eval/episode_reward", float("nan"))
+    nan = [k for k, v in metrics.items() if not np.isfinite(float(v))]
+    print(f"{num_steps:>12,d}  reward={r:8.3f}  {time.monotonic() - t0:7.0f}s" + (f"  NAN in {len(nan)} metrics: {nan[:4]}" if nan else ""), flush=True)
+
+  make_inference_fn, params, _ = ppo.train(
+      environment=env, eval_env=eval_env, progress_fn=progress, seed=a.seed, num_eval_envs=num_eval_envs,
+      network_factory=network_factory, restore_checkpoint_path=restore, save_checkpoint_path=str(ckpt),
+      restore_params=brax_model.load_params(a.restore_params) if a.restore_params else None,
+      wrap_env_fn=wrapper.wrap_for_brax_training,
+      # PPO losses (training/policy_loss, value_loss, entropy_loss, ...) to TensorBoard every 2M steps (logging only)
+      log_training_metrics=True, training_metrics_steps=2_000_000, **training_params)
+  brax_model.save_params(str(logdir / "params.pkl"), params)
+  print("saved", logdir / "params.pkl", "in", f"{time.monotonic() - t0:.0f}s")
+
+
+if __name__ == "__main__":
+  main()

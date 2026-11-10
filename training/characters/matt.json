@@ -1,0 +1,18 @@
+{
+ "id": "matt",
+ "unityName": "Creature02_Matt",
+ "displayName": "Matt",
+ "body": 1,
+ "height": 1.89,
+ "raceable": 0,
+ "blockedBy": "Preview: his policy (m6) walks and never falls but only reaches about half the commanded speed; graduation 0/100.",
+ "visualPrefab": null,
+ "color": {
+  "r": 1,
+  "g": 0.62,
+  "b": 0.18,
+  "a": 1
+ },
+ "cameraHeight": 1.2,
+ "traits": null
+}
