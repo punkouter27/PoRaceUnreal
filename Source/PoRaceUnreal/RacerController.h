@@ -45,6 +45,7 @@ struct FRaceHud
 	bool bHandicap = false;						// head starts this race
 	FString TrackId;
 	int64 Steps = 0;
+	int32 NanInfCount = 0;
 	FVector TangentUE = FVector::ForwardVector;	// track direction at the pack's mean distance
 	TArray<FRaceHudRow> Rows;					// standings order
 	FString Result;								// the result line once the race is over
@@ -117,6 +118,18 @@ public:
 	/** The level's race controller: the one on a live actor of World (never a stale Blueprint copy). */
 	static URacerController* Find(const UWorld* World);
 
+	/** Request an immediate race/episode reset on the next physics step (R key). */
+	void RequestRestart() { bRestartRequested.store(true, std::memory_order_release); }
+
+	/** Cycle active policy preset index (F4 key). */
+	int32 CyclePolicyOverride()
+	{
+		const int32 Next = (PolicyOverrideIndex.load(std::memory_order_relaxed) + 1) % 3;
+		PolicyOverrideIndex.store(Next, std::memory_order_release);
+		return Next;
+	}
+	int32 GetPolicyOverride() const { return PolicyOverrideIndex.load(std::memory_order_acquire); }
+
 private:
 	bool bReady = false, bRace = false, bTest = false, bStarted = false, bReported = false;
 	std::atomic<bool> bGameReady = false;
@@ -154,6 +167,8 @@ private:
 	void Finish();
 
 	std::atomic<int64> StepCount = 0;
+	std::atomic<bool> bRestartRequested = false;
+	std::atomic<int32> PolicyOverrideIndex = 0;
 };
 
 /** Nothing to possess: MuJoCo owns the racers; the HUD draws the race and ARaceDirector moves the camera. */

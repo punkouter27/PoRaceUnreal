@@ -243,6 +243,7 @@ void URacerController::PublishHud(const mjData* d)
 	Hud.TrackId = Rules.Track.Id;
 	Hud.RaceTime = Rules.RaceTime();
 	Hud.Steps = StepCount.load(std::memory_order_relaxed);
+	Hud.NanInfCount = FRaceBrain::NanInfCount.load(std::memory_order_relaxed);
 	Hud.Rows.SetNum(Rules.Entries.Num());
 	double Mean = 0.0;
 	int32 Running = 0;
@@ -397,6 +398,11 @@ void URacerController::ComputeAndApply(mjModel* m, mjData* d, uint8 Source)
 			const double Now = FPlatformTime::Seconds();
 			if (Now > WaitLogAt) { WaitLogAt = Now + 10.0; UE_LOG(LogRace, Log, TEXT("race: waiting for the first drawn frame")); }
 			return;	// the model runs uncontrolled meanwhile; Setup resets it completely
+		}
+		if (bRestartRequested.exchange(false, std::memory_order_acq_rel))
+		{
+			bStarted = false;
+			bReported = false;
 		}
 		if (!bStarted)
 		{

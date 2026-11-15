@@ -8,6 +8,15 @@
 
 class ACameraActor;
 
+UENUM(BlueprintType)
+enum class ERaceCameraMode : uint8
+{
+	Broadcast,
+	Follow,
+	Orbit,
+	Free
+};
+
 /**
  * Game-thread side of the race: the chase camera on the pack, and two checks the race test gates on.
  *   marker check  MuJoCo metres -> Unreal centimetres with Y mirrored: three reference points through URLab's
@@ -37,6 +46,10 @@ public:
 	virtual void BeginPlay() override;
 	virtual void Tick(float DeltaSeconds) override;
 
+	ERaceCameraMode CycleCameraMode();
+	void SetCameraMode(ERaceCameraMode InMode);
+	ERaceCameraMode GetCameraMode() const { return CameraMode; }
+
 private:
 	TWeakObjectPtr<URacerController> Controller;
 	FRaceHud Race;
@@ -46,7 +59,10 @@ private:
 	FString ShotDir;
 	double QuitAt = -1.0, WaitedSeconds = 0.0;
 	bool bGaveUp = false;
+	ERaceCameraMode CameraMode = ERaceCameraMode::Broadcast;
+	float OrbitAngleRad = 0.f;
 	FVector CamPos = FVector::ZeroVector, CamFwd = FVector::ForwardVector;
+	FVector FreeCamPos = FVector::ZeroVector, FreeLookOffset = FVector(600.0, 0.0, -120.0);
 	void CheckChaos();
 	void CheckMarkers(float DeltaSeconds);
 	void Fail(const FString& What);

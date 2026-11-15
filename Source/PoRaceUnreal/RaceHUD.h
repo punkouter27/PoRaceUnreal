@@ -75,6 +75,8 @@ private:
 	FRaceHud Race;
 	TWeakObjectPtr<URacerController> Controller;
 	bool bPaused = false;
+	bool bTelemetryVisible = true;
+	int32 AppModeIndex = 0;	// 0 = Watch, 1 = Play, 2 = Testbed
 	double ResultsAt = -1.0;
 	bool bCounted = false;
 	TSharedPtr<SRaceProbe> Gear;

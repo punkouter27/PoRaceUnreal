@@ -5,6 +5,7 @@
 // which may then reset or re-command the racer), then Control.
 
 #include "CoreMinimal.h"
+#include <atomic>
 #include <mujoco/mujoco.h>
 
 class UNNEModelData;
@@ -16,10 +17,13 @@ struct FRaceBrain
 	TSharedPtr<UE::NNE::IModelInstanceCPU> Net;
 	int32 NumIn = 0;
 	FString Label;
+	static std::atomic<int32> NanInfCount;
 
 	bool Load(UNNEModelData* Data);
 	bool IsValid() const { return Net.IsValid(); }
 	bool Run(const float* Obs, float* Action, int32 NumAction) const;
+	/** Appends zero-initialized observation inputs at the tail without reordering existing slots. */
+	static void AppendZeroInitInputs(TArray<float>& Obs, int32 ExtraCount);
 };
 
 enum class ERacerState : uint8 { Racing, Stumble, Fallen };

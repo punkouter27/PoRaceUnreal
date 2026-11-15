@@ -17,8 +17,11 @@
 #include "MuJoCo/Core/AMjManager.h"
 #include "MuJoCo/Core/MjPhysicsEngine.h"
 #include "RaceGameInstance.h"
+#include "RaceDirector.h"
 #include "RaceNames.h"
 #include "RaceProbe.h"
+#include "EngineUtils.h"
+#include "InputCoreTypes.h"
 #include "Rendering/SlateRenderer.h"
 #include "Widgets/SOverlay.h"
 
@@ -151,10 +154,34 @@ void ARaceHUD::DrawHUD()
 	LastSteps = Race.Steps;
 	// the rates: top centre; on a portrait screen bottom centre (the standings column reaches the middle there)
 	const bool bPortrait = H > W;
-	Text(FString::Printf(TEXT("%.0f fps  ·  %.0f Hz"), FpsSmooth, HzSmooth), 0.5f * W, bPortrait ? H - Pad - 18.f * S : Pad, FLinearColor(0.85f, 0.85f, 0.85f), 13.f * S, true, false, TEXT("TC"));
+	const TCHAR* ModeNames[] = { TEXT("Watch"), TEXT("Play"), TEXT("Testbed") };
+	Text(FString::Printf(TEXT("%.0f fps  ·  %.0f Hz  ·  %s  ·  Seed %llu"), FpsSmooth, HzSmooth, ModeNames[AppModeIndex % 3], Race.Seed), 0.5f * W, bPortrait ? H - Pad - 18.f * S : Pad, FLinearColor(0.85f, 0.85f, 0.85f), 13.f * S, true, false, TEXT("TC"));
 	if (!Race.bRace) return;
 
-	if (PC && PC->WasInputKeyJustPressed(EKeys::Escape)) TogglePause();
+	if (PC)
+	{
+		if (PC->WasInputKeyJustPressed(EKeys::Escape) || PC->WasInputKeyJustPressed(EKeys::SpaceBar)) TogglePause();
+		if (PC->WasInputKeyJustPressed(EKeys::F1)) AppModeIndex = (AppModeIndex + 1) % 3;
+		if (PC->WasInputKeyJustPressed(EKeys::F2))
+		{
+			for (TActorIterator<ARaceDirector> It(GetWorld()); It; ++It) { It->CycleCameraMode(); break; }
+		}
+		if (PC->WasInputKeyJustPressed(EKeys::F3)) bTelemetryVisible = !bTelemetryVisible;
+		if (PC->WasInputKeyJustPressed(EKeys::F4) && Controller.IsValid()) Controller->CyclePolicyOverride();
+		if (PC->WasInputKeyJustPressed(EKeys::R) && Controller.IsValid()) Controller->RequestRestart();
+	}
+
+	if (bTelemetryVisible)
+	{
+		const double LeadDist = Race.Rows.Num() > 0 ? Race.Rows[0].Distance : 0.0;
+		const int32 PolIdx = Controller.IsValid() ? Controller->GetPolicyOverride() : 0;
+		const TCHAR* PolLabel = PolIdx == 0 ? TEXT("Ref RL") : PolIdx == 1 ? TEXT("Bot") : TEXT("Custom");
+		const FLinearColor PolColor = PolIdx == 0 ? FLinearColor(0.16f, 0.55f, 0.28f)
+		                            : PolIdx == 1 ? FLinearColor(1.f, 0.25f, 0.20f)
+		                            : FLinearColor(0.20f, 0.50f, 1.f);
+		Text(FString::Printf(TEXT("Policy: %s  |  Reward~ %.1f  |  NaN/Inf: %d"), PolLabel, LeadDist, Race.NanInfCount),
+			Pad, H - Pad - 20.f * S, Race.NanInfCount > 0 ? FLinearColor(1.f, 0.25f, 0.20f) : PolColor, 12.f * S, false, false, TEXT("BL"));
+	}
 
 	// top left: track and lap, then the standings and the race clock
 	int32 Lap = 1;

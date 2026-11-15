@@ -10,6 +10,7 @@
 #include "RaceGameInstance.h"
 #include "RaceNames.h"
 #include "RaceProbe.h"
+#include "UiTheme.h"
 #include "Styling/CoreStyle.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Layout/SBorder.h"
@@ -22,12 +23,12 @@
 
 namespace
 {
-	constexpr float Touch = 48.f;
-	const FLinearColor Gold(1.f, 0.82f, 0.25f), Dim(0.55f, 0.55f, 0.6f), Ink(0.93f, 0.93f, 0.95f);
-	const FSlateColorBrush& Backdrop() { static const FSlateColorBrush B(FLinearColor(0.02f, 0.025f, 0.035f, 1.f)); return B; }
-	const FSlateRoundedBoxBrush& Card() { static const FSlateRoundedBoxBrush B(FLinearColor(0.f, 0.f, 0.f, 0.78f), 14.f); return B; }
-	const FSlateRoundedBoxBrush& Panel() { static const FSlateRoundedBoxBrush B(FLinearColor(0.07f, 0.075f, 0.09f, 1.f), 14.f); return B; }
-	const FSlateRoundedBoxBrush& On() { static const FSlateRoundedBoxBrush B(FLinearColor(0.13f, 0.11f, 0.05f, 1.f), 10.f, FLinearColor(1.f, 0.82f, 0.25f, 1.f), 2.f); return B; }	// picked: dark, gold outline (a racer's colour stays readable on it)
+	constexpr float Touch = RaceUiTheme::TouchMin;
+	const FLinearColor Gold = RaceUiTheme::Gold, Dim = RaceUiTheme::Dim, Ink = RaceUiTheme::Ink;
+	const FSlateColorBrush& Backdrop() { static const FSlateColorBrush B(RaceUiTheme::BackdropColor); return B; }
+	const FSlateRoundedBoxBrush& Card() { static const FSlateRoundedBoxBrush B(RaceUiTheme::CardColor, RaceUiTheme::RadiusM); return B; }
+	const FSlateRoundedBoxBrush& Panel() { static const FSlateRoundedBoxBrush B(RaceUiTheme::PanelColor, RaceUiTheme::RadiusM); return B; }
+	const FSlateRoundedBoxBrush& On() { static const FSlateRoundedBoxBrush B(FLinearColor(0.13f, 0.11f, 0.05f, 1.f), 10.f, RaceUiTheme::Gold, 2.f); return B; }	// picked: dark, gold outline (a racer's colour stays readable on it)
 	const FSlateRoundedBoxBrush& Off() { static const FSlateRoundedBoxBrush B(FLinearColor(1.f, 1.f, 1.f, 0.07f), 10.f); return B; }
 	const FSlateRoundedBoxBrush& Faint() { static const FSlateRoundedBoxBrush B(FLinearColor(1.f, 1.f, 1.f, 0.025f), 10.f); return B; }
 

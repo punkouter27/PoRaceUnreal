@@ -6,6 +6,19 @@
 #include "RaceNames.h"
 #include <cmath>
 
+std::atomic<int32> FRaceBrain::NanInfCount{ 0 };
+
+void FRaceBrain::AppendZeroInitInputs(TArray<float>& Obs, int32 ExtraCount)
+{
+	if (ExtraCount <= 0) return;
+	const int32 Base = Obs.Num();
+	Obs.SetNumUninitialized(Base + ExtraCount);
+	for (int32 i = 0; i < ExtraCount; ++i)
+	{
+		Obs[Base + i] = 0.f;
+	}
+}
+
 bool FRaceBrain::Load(UNNEModelData* Data)
 {
 	Net.Reset();
@@ -32,7 +45,19 @@ bool FRaceBrain::Run(const float* InObs, float* OutAction, int32 NumAction) cons
 {
 	const UE::NNE::FTensorBindingCPU In{ (void*)InObs, (uint64)NumIn * sizeof(float) };
 	const UE::NNE::FTensorBindingCPU Out{ OutAction, (uint64)NumAction * sizeof(float) };
-	return Net->RunSync({ In }, { Out }) == UE::NNE::EResultStatus::Ok;
+	const bool bOk = Net->RunSync({ In }, { Out }) == UE::NNE::EResultStatus::Ok;
+	if (bOk && OutAction)
+	{
+		for (int32 i = 0; i < NumAction; ++i)
+		{
+			if (!std::isfinite(OutAction[i]))
+			{
+				NanInfCount.fetch_add(1, std::memory_order_relaxed);
+				OutAction[i] = 0.f;
+			}
+		}
+	}
+	return bOk;
 }
 
 bool FRacer::ResolveRoot(const mjModel* m, const FString& RootBody)

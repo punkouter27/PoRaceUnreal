@@ -13,6 +13,7 @@
 #include "MuJoCo/Utils/MjUtils.h"
 #include "RaceNames.h"
 #include "RaceRegistry.h"
+#include "InputCoreTypes.h"
 #include "Misc/CommandLine.h"
 #include "Misc/Parse.h"
 #include "UnrealClient.h"
@@ -214,7 +215,7 @@ void ARaceDirector::Tick(float DeltaSeconds)
 		return;
 	}
 
-	// chase camera: behind and above the mean of the racers still running, looking along the track there
+	// chase / follow / orbit / free camera on pack mean
 	FVector Target = FVector::ZeroVector;
 	int32 N = 0;
 	for (const FRaceHudRow& R : Race.Rows) if (R.FinishTime < 0.0) { Target += R.PosUE; ++N; }
@@ -223,12 +224,63 @@ void ARaceDirector::Tick(float DeltaSeconds)
 	const float A = bHaveCamera ? 1.f - FMath::Exp(-2.5f * DeltaSeconds) : 1.f;
 	CamFwd = FMath::Lerp(CamFwd, Race.TangentUE.GetSafeNormal(), A).GetSafeNormal();
 	const FVector Side = FVector::CrossProduct(FVector::UpVector, CamFwd);
-	const FVector Want = Target - CamFwd * Chase.X * 100.0 + Side * Chase.Y * 100.0 + FVector::UpVector * Chase.Z * 100.0;
+
+	if (CameraMode == ERaceCameraMode::Free)
+	{
+		if (APlayerController* PC = UGameplayStatics::GetPlayerController(this, 0))
+		{
+			const float Speed = 500.f * DeltaSeconds;
+			const FVector FwdXY = FVector(CamFwd.X, CamFwd.Y, 0.0).GetSafeNormal();
+			const FVector SideXY = FVector::CrossProduct(FVector::UpVector, FwdXY);
+			if (PC->IsInputKeyDown(EKeys::W) || PC->IsInputKeyDown(EKeys::Up)) FreeCamPos += FwdXY * Speed;
+			if (PC->IsInputKeyDown(EKeys::S) || PC->IsInputKeyDown(EKeys::Down)) FreeCamPos -= FwdXY * Speed;
+			if (PC->IsInputKeyDown(EKeys::D) || PC->IsInputKeyDown(EKeys::Right)) FreeCamPos += SideXY * Speed;
+			if (PC->IsInputKeyDown(EKeys::A) || PC->IsInputKeyDown(EKeys::Left)) FreeCamPos -= SideXY * Speed;
+		}
+		CamPos = FreeCamPos;
+		bHaveCamera = true;
+		if (Camera) Camera->SetActorLocationAndRotation(CamPos, (Target - CamPos).Rotation());
+		return;
+	}
+
+	FVector Want;
+	if (CameraMode == ERaceCameraMode::Orbit)
+	{
+		OrbitAngleRad += DeltaSeconds * 0.55f;
+		const double Radius = Chase.X * 100.0;
+		Want = Target + FVector(FMath::Cos(OrbitAngleRad) * Radius, FMath::Sin(OrbitAngleRad) * Radius, Chase.Z * 100.0);
+	}
+	else if (CameraMode == ERaceCameraMode::Follow)
+	{
+		Want = Target - CamFwd * (Chase.X * 0.72 * 100.0) + FVector::UpVector * (Chase.Z * 0.85 * 100.0);
+	}
+	else
+	{
+		Want = Target - CamFwd * Chase.X * 100.0 + Side * Chase.Y * 100.0 + FVector::UpVector * Chase.Z * 100.0;
+	}
+
 	CamPos = bHaveCamera ? FMath::Lerp(CamPos, Want, A) : Want;
 	bHaveCamera = true;
 	if (Camera)
 	{
 		const FVector Look = Target + FVector::UpVector * LookHeight * 100.0;
 		Camera->SetActorLocationAndRotation(CamPos, (Look - CamPos).Rotation());
+	}
+}
+
+ERaceCameraMode ARaceDirector::CycleCameraMode()
+{
+	const int32 Next = (static_cast<int32>(CameraMode) + 1) % 4;
+	SetCameraMode(static_cast<ERaceCameraMode>(Next));
+	return CameraMode;
+}
+
+void ARaceDirector::SetCameraMode(ERaceCameraMode InMode)
+{
+	if (CameraMode == InMode) return;
+	CameraMode = InMode;
+	if (InMode == ERaceCameraMode::Free)
+	{
+		FreeCamPos = bHaveCamera ? CamPos : (Camera ? Camera->GetActorLocation() : FVector::ZeroVector);
 	}
 }
