@@ -194,6 +194,11 @@ void ARaceHUD::BuildMenu()
 					.Text_Lambda([Self] { FString W; if (Self.IsValid()) Self->CanStart(&W); return T(W); })]];
 	Ui = SNew(SOverlay)
 		+ SOverlay::Slot()[SAssignNew(ScreenProbe, SRaceProbe)[SNew(SBorder).BorderImage(&Backdrop())]]
+		+ SOverlay::Slot().HAlign(HAlign_Left).VAlign(VAlign_Top).Padding(FMargin(16.f, 12.f))
+			[Label(T(TEXT("PoRace")), 22, FSlateColor(Gold))]
+		+ SOverlay::Slot().HAlign(HAlign_Right).VAlign(VAlign_Top).Padding(FMargin(16.f, 12.f))
+			[SAssignNew(Gear, SRaceProbe)[Button(Label(T(TEXT("⚙")), 18, FSlateColor(Ink)), [Self] { if (Self.IsValid()) Self->bHandicap = !Self->bHandicap; },
+				[Self] { return Self.IsValid() && Self->bHandicap; }, nullptr, Touch)]]
 		+ SOverlay::Slot().HAlign(HAlign_Center).VAlign(VAlign_Center).Padding(FMargin(16.f, 16.f, 16.f, 48.f))
 			[SNew(SScaleBox).Stretch(EStretch::ScaleToFit).StretchDirection(EStretchDirection::DownOnly)[SAssignNew(MenuPanel, SRaceProbe)[Panel_]]]
 		// the build stamp, in Slate here: the Canvas one is drawn under the menu's opaque backdrop

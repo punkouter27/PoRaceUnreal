@@ -1,7 +1,7 @@
 # CI entry point for .github/workflows/webgl.yml: build WebGL headless, deploy it with deploy_webgl.ps1,
 # then check the live page. Same file in every Po Unity game; only -Method differs (the game's builder).
 #
-#   pwsh Tools/ci_webgl.ps1 -Method PoSumo.EditorTools.BuildWebGL.Build
+#   pwsh Tools/ci_webgl.ps1 -Method PoRaceUnreal.EditorTools.BuildWebGL.Build
 #
 # Runs on the self-hosted `unity` runner, i.e. the dev PC, with its Unity install, license and az login.
 param([Parameter(Mandatory)][string] $Method)
