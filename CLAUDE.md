@@ -1,3 +1,5 @@
+@AGENTS.md
+
 # CLAUDE.md — PoRaceUnreal
 
 See `AGENTS.md`, `SPEC.md`, `docs/PRD.md`, and `tasks/plan.md` for architecture and slice gates.

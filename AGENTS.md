@@ -33,3 +33,7 @@ physics authority; Unreal renders and presents the simulation. Read `SPEC.md`,
   Report skipped engine, device, visual, or long-running gates explicitly.
 - For UI changes, retain the five HUD anchors and bottom-docked, non-overlapping
   panels; save the required before/after evidence under `SCREENSHOTS/`.
+
+## CI/CD and Azure
+
+- A push to `master` runs `.github/workflows/deploy.yml` on a GitHub-hosted runner to validate Python scripts and contracts. The Unreal Engine 5 project is built and tested locally.
