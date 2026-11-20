@@ -1,4 +1,4 @@
-"""The stroller's MuJoCo body, from the rigged scan (C:/Users/punko/Downloads/Stroller/Unreal/stroller_vehicle.blend, probed
+"""The stroller's MuJoCo body, from the rigged scan (<scan source, outside the repo>/Stroller/Unreal/stroller_vehicle.blend, probed
 with Blender 2026-11-10; numbers below, metres, x forward / y left / z up, ground at z 0, the same frame as the rig):
 
   wheel_rear_l  hub (-0.232,  0.2935, 0.168), radius 0.168, width 0.06

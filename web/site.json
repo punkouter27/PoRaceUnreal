@@ -1,0 +1,24 @@
+{
+  "_doc": "Showcase content. web/build.py turns this into dist/index.html; screenshots are copied from SCREENSHOTS/ at build time.",
+  "title": "PoRace",
+  "tagline": "A watch-only racing simulation: every racer is a physically simulated body moved by a learned brain.",
+  "repo": "https://github.com/punkouter27/PoRaceUnreal",
+  "intro": [
+    "PoRace races very different creatures against each other on the same track under the same physics: a Unitree Go2 robot dog, a tall man (Matt), a small older woman (Grandma) and a jogging stroller.",
+    "Nobody steers and nothing is animated. MuJoCo simulates every body; each racer's brain learned to walk, run, recover and get up through reinforcement learning, and Unreal Engine 5 presents the race like a sports broadcast."
+  ],
+  "facts": [
+    ["Engine", "Unreal Engine 5.8, Windows and Android"],
+    ["Physics", "MuJoCo 4.0.0 inside Unreal (URLab plugin); Chaos is off"],
+    ["Brains", "PPO (Brax / mujoco_playground) exported to ONNX, run with Unreal NNE"],
+    ["Checks", "A Python reference race on CPU MuJoCo matches the Unreal race seed for seed"]
+  ],
+  "screenshots": [
+    {"src": "SCREENSHOTS/slice4/PlanarSprint_2_racing.png", "caption": "Planar Sprint: Matt mid-stride, chasing the Go2"},
+    {"src": "SCREENSHOTS/slice4/FlatOval_1_grid_1280x720.png", "caption": "Flat Oval: the starting grid"},
+    {"src": "SCREENSHOTS/slice4/FlatOval_5_results_1280x720.png", "caption": "Results after the race"},
+    {"src": "SCREENSHOTS/slice4/Menu_1280x720.png", "caption": "Track and field picker"},
+    {"src": "SCREENSHOTS/slice4/FlatOval_1_grid_540x1170.png", "caption": "The same race on a phone (portrait)"}
+  ],
+  "extra_files": ["privacy-policy.html"]
+}

@@ -1,6 +1,6 @@
 # The Stroller: a wheeled racer, 2026-11-10
 
-Result: **on the roster and racing.** A scanned three-wheeled jogging stroller (source: `C:/Users/punko/Downloads/Stroller`,
+Result: **on the roster and racing.** A scanned three-wheeled jogging stroller (source: `<scan source, outside the repo>/Stroller`,
 copied to `Content/Art/Stroller/`) with a trained rolling brain. Ready on flat tracks; races identical in Unreal and
 Python.
 
