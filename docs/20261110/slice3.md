@@ -5,7 +5,7 @@ Python reference race exactly.
 
 ## Results
 
-`Scripts/regress.ps1` (Unreal headless race test, then Python on the same model and on the track file):
+`scripts/regress.ps1` (Unreal headless race test, then Python on the same model and on the track file):
 
 | Race | Seeds | Unreal | Same model | Track file | Checks |
 |---|---|---|---|---|---|

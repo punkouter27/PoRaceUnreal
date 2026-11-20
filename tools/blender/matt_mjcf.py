@@ -18,6 +18,7 @@ playground G1 joystick env, export_onnx.py and G1Controller run on it unchanged.
 Frames: Blender (x right, y back, z up; Matt faces -Y) -> MuJoCo (x forward, y left, z up): (x, y, z) -> (-y, x, z).
 Writes training/matt/assets/matt_porace.xml (trainer scene) and training/matt/fit.json (landmarks and fits).
 """
+
 import json
 import math
 import os
@@ -33,27 +34,52 @@ from mathutils import Vector
 # G1 x 2.46 -> 0.63 of Matt's). strength: forcerange multiplier (Grandma ~0.5: peak joint torques of a woman in her
 # 70s, knee extension ~100-125 Nm). rom: per-joint (lo, hi) overrides, active range of an older body.
 PROFILES = {
-  "matt": dict(rig="Matt", mesh="MattMesh", mass=88.0, gain=1.0, strength=1.0, rom={},
-               src="Assets/Art/Raw/matt.blend"),
-  "grandma": dict(rig="Grandma", mesh="GrandmaMesh", mass=72.0, gain=0.63, strength=0.5, src="Assets/Art/Raw/grandma.blend",
-                  # thighs: her fitted capsules (r 9.3 cm, wider than Matt's on a shorter body) met at 0.2 rad adduction and
-                  # would rub on every stride; soft tissue compresses, so 85 % of the fit and adduction to 0.15 rad
-                  fit_scale={"thigh": 0.85},
-                  rom={"hip_pitch": ((-1.6, 0.35), (-1.6, 0.35)), "knee": ((0.0, 2.2), (0.0, 2.2)),
-                       "hip_roll": ((-0.15, 0.8), (-0.8, 0.15)),
-                       "waist_yaw": ((-0.4, 0.4),) * 2, "waist_roll": ((-0.25, 0.25),) * 2, "waist_pitch": ((-0.2, 0.5),) * 2,
-                       "shoulder_pitch": ((-2.6, 0.8), (-2.6, 0.8)), "shoulder_roll": ((-0.4, 2.2), (-2.2, 0.4))}),
+    "matt": dict(
+        rig="Matt", mesh="MattMesh", mass=88.0, gain=1.0, strength=1.0, rom={}, src="Assets/Art/Raw/matt.blend"
+    ),
+    "grandma": dict(
+        rig="Grandma",
+        mesh="GrandmaMesh",
+        mass=72.0,
+        gain=0.63,
+        strength=0.5,
+        src="Assets/Art/Raw/grandma.blend",
+        # thighs: her fitted capsules (r 9.3 cm, wider than Matt's on a shorter body) met at 0.2 rad adduction and
+        # would rub on every stride; soft tissue compresses, so 85 % of the fit and adduction to 0.15 rad
+        fit_scale={"thigh": 0.85},
+        rom={
+            "hip_pitch": ((-1.6, 0.35), (-1.6, 0.35)),
+            "knee": ((0.0, 2.2), (0.0, 2.2)),
+            "hip_roll": ((-0.15, 0.8), (-0.8, 0.15)),
+            "waist_yaw": ((-0.4, 0.4),) * 2,
+            "waist_roll": ((-0.25, 0.25),) * 2,
+            "waist_pitch": ((-0.2, 0.5),) * 2,
+            "shoulder_pitch": ((-2.6, 0.8), (-2.6, 0.8)),
+            "shoulder_roll": ((-0.4, 2.2), (-2.2, 0.4)),
+        },
+    ),
 }
-_argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
+_argv = sys.argv[sys.argv.index("--") + 1 :] if "--" in sys.argv else []
 CREATURE = _argv[_argv.index("--creature") + 1] if "--creature" in _argv else "matt"
 PRO = PROFILES[CREATURE]
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 OUT = os.path.join(ROOT, "training", CREATURE)
-BODY_MASS = PRO["mass"]   # kg. Matt: BMI 25 at 1.89 m (his weight unknown). Grandma: BMI 29 at 1.58 m (stocky build)
-FRAC = {"pelvis": 0.142, "abdomen": 0.139, "chest": 0.216, "neck": 0.012, "head": 0.069, "thigh": 0.100,
-        "shin": 0.0465, "foot": 0.0145, "upper_arm": 0.028, "forearm": 0.016, "hand": 0.006}   # Winter (2009)
-LINK_MASS = 0.1       # intermediate joint links (G1 chain bodies without geometry)
+BODY_MASS = PRO["mass"]  # kg. Matt: BMI 25 at 1.89 m (his weight unknown). Grandma: BMI 29 at 1.58 m (stocky build)
+FRAC = {
+    "pelvis": 0.142,
+    "abdomen": 0.139,
+    "chest": 0.216,
+    "neck": 0.012,
+    "head": 0.069,
+    "thigh": 0.100,
+    "shin": 0.0465,
+    "foot": 0.0145,
+    "upper_arm": 0.028,
+    "forearm": 0.016,
+    "hand": 0.006,
+}  # Winter (2009)
+LINK_MASS = 0.1  # intermediate joint links (G1 chain bodies without geometry)
 
 rig = bpy.data.objects[PRO["rig"]]
 mesh = bpy.data.objects[PRO["mesh"]]
@@ -61,12 +87,12 @@ M = rig.matrix_world
 
 
 def mj(v):
-  return Vector((-v.y, v.x, v.z))
+    return Vector((-v.y, v.x, v.z))
 
 
 def joint(bone, tail=False):
-  b = rig.data.bones[bone]
-  return mj(M @ (b.tail_local if tail else b.head_local))
+    b = rig.data.bones[bone]
+    return mj(M @ (b.tail_local if tail else b.head_local))
 
 
 gi = {g.name: g.index for g in mesh.vertex_groups}
@@ -75,49 +101,49 @@ WEIGHTS = [{g.group: g.weight for g in v.groups} for v in mesh.data.vertices]
 
 
 def owned(*bones):
-  ids = [gi[b] for b in bones]
-  return [VERTS[i] for i, w in enumerate(WEIGHTS) if sum(w.get(g, 0.0) for g in ids) >= 0.5]
+    ids = [gi[b] for b in bones]
+    return [VERTS[i] for i, w in enumerate(WEIGHTS) if sum(w.get(g, 0.0) for g in ids) >= 0.5]
 
 
 def pct(vals, q):
-  s = sorted(vals)
-  return s[min(len(s) - 1, int(q * len(s)))]
+    s = sorted(vals)
+    return s[min(len(s) - 1, int(q * len(s)))]
 
 
 def limb_radius(pts, a, b, q=0.4):
-  """Radius of a capsule on segment a-b: a percentile of the owned vertices' distance to the segment (middle 80 %
-  of its length only, so joint bulges and neighbours do not inflate it). Low percentile: the scan's baggy sleeves
-  and shorts are cloth, not limb."""
-  ab = b - a
-  d = []
-  for p in pts:
-    t = (p - a).dot(ab) / ab.length_squared
-    if 0.1 < t < 0.9:
-      d.append((p - (a + ab * t)).length)
-  return pct(d, q)
+    """Radius of a capsule on segment a-b: a percentile of the owned vertices' distance to the segment (middle 80 %
+    of its length only, so joint bulges and neighbours do not inflate it). Low percentile: the scan's baggy sleeves
+    and shorts are cloth, not limb."""
+    ab = b - a
+    d = []
+    for p in pts:
+        t = (p - a).dot(ab) / ab.length_squared
+        if 0.1 < t < 0.9:
+            d.append((p - (a + ab * t)).length)
+    return pct(d, q)
 
 
 def torso_band(pts, z0, z1, k=0.45):
-  """Horizontal capsule (along y) for a torso band z0..z1: radius 0.45 x the front-back depth (a little under half:
-  soft tissue), ends at the band's width minus that radius."""
-  band = [p for p in pts if z0 <= p.z <= z1]
-  xs, ys = [p.x for p in band], [p.y for p in band]
-  x0, x1 = pct(xs, 0.05), pct(xs, 0.95)
-  r = k * (x1 - x0)
-  half = max(0.02, (pct(ys, 0.97) - pct(ys, 0.03)) / 2 - r)
-  return Vector(((x0 + x1) / 2, (pct(ys, 0.03) + pct(ys, 0.97)) / 2, (z0 + z1) / 2)), half, r
+    """Horizontal capsule (along y) for a torso band z0..z1: radius 0.45 x the front-back depth (a little under half:
+    soft tissue), ends at the band's width minus that radius."""
+    band = [p for p in pts if z0 <= p.z <= z1]
+    xs, ys = [p.x for p in band], [p.y for p in band]
+    x0, x1 = pct(xs, 0.05), pct(xs, 0.95)
+    r = k * (x1 - x0)
+    half = max(0.02, (pct(ys, 0.97) - pct(ys, 0.03)) / 2 - r)
+    return Vector(((x0 + x1) / 2, (pct(ys, 0.03) + pct(ys, 0.97)) / 2, (z0 + z1) / 2)), half, r
 
 
 # --- landmarks (MuJoCo frame, metres) ---------------------------------------------------------------------------
 L = {}
 for s, side in (("left", "Left"), ("right", "Right")):
-  L[s + "_hip"] = joint(side + "UpperLeg")
-  L[s + "_knee"] = joint(side + "LowerLeg")
-  L[s + "_ankle"] = joint(side + "Foot")
-  L[s + "_shoulder"] = joint(side + "UpperArm")
-  L[s + "_elbow"] = joint(side + "LowerArm")
-  L[s + "_wrist"] = joint(side + "Hand")
-  L[s + "_handtip"] = joint(side + "Hand", tail=True)
+    L[s + "_hip"] = joint(side + "UpperLeg")
+    L[s + "_knee"] = joint(side + "LowerLeg")
+    L[s + "_ankle"] = joint(side + "Foot")
+    L[s + "_shoulder"] = joint(side + "UpperArm")
+    L[s + "_elbow"] = joint(side + "LowerArm")
+    L[s + "_wrist"] = joint(side + "Hand")
+    L[s + "_handtip"] = joint(side + "Hand", tail=True)
 L["pelvis"] = joint("Hips")
 L["lumbar"] = joint("Spine")
 L["neck"] = joint("Neck")
@@ -136,25 +162,25 @@ hc = sum(headv, Vector()) / len(headv)
 F["head"] = (hc, pct([(p - hc).length for p in headv], 0.45))
 F["neck"] = limb_radius(owned("Neck"), L["neck"], L["head"])
 for s, side in (("left", "Left"), ("right", "Right")):
-  F[s + "_thigh"] = limb_radius(owned(side + "UpperLeg"), L[s + "_hip"], L[s + "_knee"])
-  F[s + "_shin"] = limb_radius(owned(side + "LowerLeg"), L[s + "_knee"], L[s + "_ankle"])
-  F[s + "_upper_arm"] = limb_radius(owned(side + "UpperArm"), L[s + "_shoulder"], L[s + "_elbow"])
-  F[s + "_forearm"] = limb_radius(owned(side + "LowerArm"), L[s + "_elbow"], L[s + "_wrist"])
-  F[s + "_hand"] = limb_radius(owned(side + "Hand"), L[s + "_wrist"], L[s + "_handtip"], 0.5)
-  # foot: in its own frame (the feet toe out): long axis = ankle -> toe tip direction on the floor
-  fv = owned(side + "Foot", side + "Toes")
-  tipv = joint(side + "Toes", tail=True)
-  ax = Vector((tipv.x - L[s + "_ankle"].x, tipv.y - L[s + "_ankle"].y, 0)).normalized()
-  ay = Vector((-ax.y, ax.x, 0))
-  us, vs = [p.dot(ax) for p in fv], [p.dot(ay) for p in fv]
-  u0, u1, v0, v1 = pct(us, 0.03), pct(us, 0.97), pct(vs, 0.1), pct(vs, 0.9)
-  sole = pct([p.z for p in fv], 0.02)
-  ctr = ax * ((u0 + u1) / 2) + ay * ((v0 + v1) / 2)
-  F[s + "_foot"] = (Vector((ctr.x, ctr.y, sole)), (u1 - u0) / 2, (v1 - v0) / 2, math.atan2(ax.y, ax.x))
+    F[s + "_thigh"] = limb_radius(owned(side + "UpperLeg"), L[s + "_hip"], L[s + "_knee"])
+    F[s + "_shin"] = limb_radius(owned(side + "LowerLeg"), L[s + "_knee"], L[s + "_ankle"])
+    F[s + "_upper_arm"] = limb_radius(owned(side + "UpperArm"), L[s + "_shoulder"], L[s + "_elbow"])
+    F[s + "_forearm"] = limb_radius(owned(side + "LowerArm"), L[s + "_elbow"], L[s + "_wrist"])
+    F[s + "_hand"] = limb_radius(owned(side + "Hand"), L[s + "_wrist"], L[s + "_handtip"], 0.5)
+    # foot: in its own frame (the feet toe out): long axis = ankle -> toe tip direction on the floor
+    fv = owned(side + "Foot", side + "Toes")
+    tipv = joint(side + "Toes", tail=True)
+    ax = Vector((tipv.x - L[s + "_ankle"].x, tipv.y - L[s + "_ankle"].y, 0)).normalized()
+    ay = Vector((-ax.y, ax.x, 0))
+    us, vs = [p.dot(ax) for p in fv], [p.dot(ay) for p in fv]
+    u0, u1, v0, v1 = pct(us, 0.03), pct(us, 0.97), pct(vs, 0.1), pct(vs, 0.9)
+    sole = pct([p.z for p in fv], 0.02)
+    ctr = ax * ((u0 + u1) / 2) + ay * ((v0 + v1) / 2)
+    F[s + "_foot"] = (Vector((ctr.x, ctr.y, sole)), (u1 - u0) / 2, (v1 - v0) / 2, math.atan2(ax.y, ax.x))
 
 for _part, _k in PRO.get("fit_scale", {}).items():
-  for _s in ("left", "right"):
-    F[f"{_s}_{_part}"] *= _k
+    for _s in ("left", "right"):
+        F[f"{_s}_{_part}"] *= _k
 # The abdomen is on torso_link, which may collide with the thighs (not adjacent segments): lift it until its bottom
 # clears the thigh capsules' tops by 4.5 cm at rest (room for trunk roll and flexion). The pelvis capsule covers the lower belly.
 c, half, r = F["abdomen"]
@@ -165,16 +191,18 @@ F["abdomen"] = (Vector((c.x, c.y, max(c.z, clear))), half, r)
 
 
 def f3(v):
-  return " ".join(f"{c:.5g}" for c in v)
+    return " ".join(f"{c:.5g}" for c in v)
 
 
 def capsule(name, a, b, r, mass, origin, extra=""):
-  return (f'<geom name="{name}" type="capsule" fromto="{f3(a - origin)} {f3(b - origin)}" size="{r:.4f}" '
-          f'mass="{mass:.4f}"{extra}/>')
+    return (
+        f'<geom name="{name}" type="capsule" fromto="{f3(a - origin)} {f3(b - origin)}" size="{r:.4f}" '
+        f'mass="{mass:.4f}"{extra}/>'
+    )
 
 
 def link(name):
-  return f'<inertial pos="0 0 0" mass="{LINK_MASS}" diaginertia="1e-4 1e-4 1e-4"/>'
+    return f'<inertial pos="0 0 0" mass="{LINK_MASS}" diaginertia="1e-4 1e-4 1e-4"/>'
 
 
 # joint class: (axis, range by side (left, right), kp, damping, armature, forcerange)
@@ -184,39 +212,42 @@ def link(name):
 # were tuned on (kp 600-800 threw him over during early exploration: m1b, rl_optimization_log.md). Static sag is the
 # policy's job, as for the G1. forcerange (Nm) caps every joint at human peak torque.
 J = {
-  "hip_pitch":      ("0 1 0", ((-1.8, 0.5), (-1.8, 0.5)), 300, 8.0, 0.05, 250),
-  "hip_roll":       ("1 0 0", ((-0.2, 0.8), (-0.8, 0.2)), 300, 8.0, 0.05, 200),
-  "hip_yaw":        ("0 0 1", ((-0.6, 0.6), (-0.6, 0.6)), 300, 8.0, 0.03, 100),
-  "knee":           ("0 1 0", ((0.0, 2.4), (0.0, 2.4)), 300, 8.0, 0.05, 250),
-  # dorsiflexion (-) to 0.6 rad: the loaded, knee-bent ankle (lunge / late stance), not the 0.35 of a relaxed one. From
-  # the -0.25 crouch, 0.35 left 6 deg: m7 pressed the ankles 0.13 rad into that stop on every 1.5 m/s stride.
-  "ankle_pitch":    ("0 1 0", ((-0.6, 0.8), (-0.6, 0.8)), 80, 4.0, 0.02, 180),
-  "ankle_roll":     ("1 0 0", ((-0.35, 0.35), (-0.35, 0.35)), 80, 4.0, 0.02, 60),
-  "waist_yaw":      ("0 0 1", ((-0.5, 0.5),) * 2, 300, 8.0, 0.05, 100),
-  "waist_roll":     ("1 0 0", ((-0.3, 0.3),) * 2, 300, 8.0, 0.05, 150),
-  "waist_pitch":    ("0 1 0", ((-0.3, 0.6),) * 2, 300, 8.0, 0.05, 200),
-  "shoulder_pitch": ("0 1 0", ((-3.0, 0.9), (-3.0, 0.9)), 100, 4.0, 0.02, 90),
-  "shoulder_roll":  ("1 0 0", ((-0.45, 2.5), (-2.5, 0.45)), 100, 4.0, 0.02, 80),
-  "shoulder_yaw":   ("0 0 1", ((-1.0, 1.0), (-1.0, 1.0)), 100, 4.0, 0.02, 50),
-  "elbow":          ("0 1 0", ((-2.4, 0.0), (-2.4, 0.0)), 80, 4.0, 0.02, 70),
-  "wrist_roll":     ("1 0 0", ((-0.6, 0.6),) * 2, 8, 0.8, 0.01, 10),
-  "wrist_pitch":    ("0 1 0", ((-0.6, 0.6),) * 2, 8, 0.8, 0.01, 10),
-  "wrist_yaw":      ("0 0 1", ((-0.6, 0.6),) * 2, 8, 0.8, 0.01, 10),
+    "hip_pitch": ("0 1 0", ((-1.8, 0.5), (-1.8, 0.5)), 300, 8.0, 0.05, 250),
+    "hip_roll": ("1 0 0", ((-0.2, 0.8), (-0.8, 0.2)), 300, 8.0, 0.05, 200),
+    "hip_yaw": ("0 0 1", ((-0.6, 0.6), (-0.6, 0.6)), 300, 8.0, 0.03, 100),
+    "knee": ("0 1 0", ((0.0, 2.4), (0.0, 2.4)), 300, 8.0, 0.05, 250),
+    # dorsiflexion (-) to 0.6 rad: the loaded, knee-bent ankle (lunge / late stance), not the 0.35 of a relaxed one. From
+    # the -0.25 crouch, 0.35 left 6 deg: m7 pressed the ankles 0.13 rad into that stop on every 1.5 m/s stride.
+    "ankle_pitch": ("0 1 0", ((-0.6, 0.8), (-0.6, 0.8)), 80, 4.0, 0.02, 180),
+    "ankle_roll": ("1 0 0", ((-0.35, 0.35), (-0.35, 0.35)), 80, 4.0, 0.02, 60),
+    "waist_yaw": ("0 0 1", ((-0.5, 0.5),) * 2, 300, 8.0, 0.05, 100),
+    "waist_roll": ("1 0 0", ((-0.3, 0.3),) * 2, 300, 8.0, 0.05, 150),
+    "waist_pitch": ("0 1 0", ((-0.3, 0.6),) * 2, 300, 8.0, 0.05, 200),
+    "shoulder_pitch": ("0 1 0", ((-3.0, 0.9), (-3.0, 0.9)), 100, 4.0, 0.02, 90),
+    "shoulder_roll": ("1 0 0", ((-0.45, 2.5), (-2.5, 0.45)), 100, 4.0, 0.02, 80),
+    "shoulder_yaw": ("0 0 1", ((-1.0, 1.0), (-1.0, 1.0)), 100, 4.0, 0.02, 50),
+    "elbow": ("0 1 0", ((-2.4, 0.0), (-2.4, 0.0)), 80, 4.0, 0.02, 70),
+    "wrist_roll": ("1 0 0", ((-0.6, 0.6),) * 2, 8, 0.8, 0.01, 10),
+    "wrist_pitch": ("0 1 0", ((-0.6, 0.6),) * 2, 8, 0.8, 0.01, 10),
+    "wrist_yaw": ("0 0 1", ((-0.6, 0.6),) * 2, 8, 0.8, 0.01, 10),
 }
 for _k, _r in PRO["rom"].items():
-  _a = J[_k]; J[_k] = (_a[0], _r) + _a[2:]
+    _a = J[_k]
+    J[_k] = (_a[0], _r) + _a[2:]
 if PRO["gain"] != 1.0 or PRO["strength"] != 1.0:
-  J = {k: (a, r, round(kp * PRO["gain"]), round(kd * PRO["gain"], 2), arm, round(fr * PRO["strength"]))
-       for k, (a, r, kp, kd, arm, fr) in J.items()}
+    J = {
+        k: (a, r, round(kp * PRO["gain"]), round(kd * PRO["gain"], 2), arm, round(fr * PRO["strength"]))
+        for k, (a, r, kp, kd, arm, fr) in J.items()
+    }
 ACT = []
 
 
 def jnt(prefix, cls, side_i):
-  name = f"{prefix}{cls}_joint"
-  axis, ranges, kp, kd, arm, fr = J[cls]
-  lo, hi = ranges[side_i]
-  ACT.append((name, lo, hi, kp, fr))
-  return f'<joint name="{name}" axis="{axis}" range="{lo} {hi}" damping="{kd}" armature="{arm}"/>'
+    name = f"{prefix}{cls}_joint"
+    axis, ranges, kp, kd, arm, fr = J[cls]
+    lo, hi = ranges[side_i]
+    ACT.append((name, lo, hi, kp, fr))
+    return f'<joint name="{name}" axis="{axis}" range="{lo} {hi}" damping="{kd}" armature="{arm}"/>'
 
 
 m = lambda k: BODY_MASS * FRAC[k]
@@ -229,22 +260,24 @@ w('<site name="imu_in_pelvis" size="0.01" pos="0 0 0"/>')
 c, half, r = F["pelvis"]
 w(capsule("pelvis_collision", c - Vector((0, half, 0)), c + Vector((0, half, 0)), r, m("pelvis"), P0))
 for side_i, s in enumerate(("left", "right")):
-  hip, knee, ank = L[s + "_hip"], L[s + "_knee"], L[s + "_ankle"]
-  fc, fhx, fhy, yaw = F[s + "_foot"]
-  w(f'<body name="{s}_hip_pitch_link" pos="{f3(hip - P0)}">{link(0)}{jnt(s + "_", "hip_pitch", side_i)}')
-  w(f'<body name="{s}_hip_roll_link">{link(0)}{jnt(s + "_", "hip_roll", side_i)}')
-  w(f'<body name="{s}_hip_yaw_link">{jnt(s + "_", "hip_yaw", side_i)}')
-  w(capsule(f"{s}_thigh", hip, knee, F[s + "_thigh"], m("thigh"), hip))
-  w(f'<body name="{s}_knee_link" pos="{f3(knee - hip)}">{jnt(s + "_", "knee", side_i)}')
-  w(capsule(f"{s}_shin", knee, ank, F[s + "_shin"], m("shin"), knee))
-  w(f'<body name="{s}_ankle_pitch_link" pos="{f3(ank - knee)}">{link(0)}{jnt(s + "_", "ankle_pitch", side_i)}')
-  w(f'<body name="{s}_ankle_roll_link">{jnt(s + "_", "ankle_roll", side_i)}')
-  hz = 0.03                                                    # sole plate: 6 cm tall, bottom on the sole
-  box_c = Vector((fc.x, fc.y, fc.z + hz)) - ank
-  w(f'<geom name="{s}_foot" type="box" size="{fhx:.4f} {fhy:.4f} {hz}" pos="{f3(box_c)}" '
-    f'quat="{math.cos(yaw / 2):.5f} 0 0 {math.sin(yaw / 2):.5f}" mass="{m("foot"):.4f}"/>')
-  w(f'<site name="{s}_foot" size="0.01" pos="{f3(Vector((fc.x, fc.y, fc.z + 0.02)) - ank)}"/>')
-  w('</body></body></body></body></body></body>')
+    hip, knee, ank = L[s + "_hip"], L[s + "_knee"], L[s + "_ankle"]
+    fc, fhx, fhy, yaw = F[s + "_foot"]
+    w(f'<body name="{s}_hip_pitch_link" pos="{f3(hip - P0)}">{link(0)}{jnt(s + "_", "hip_pitch", side_i)}')
+    w(f'<body name="{s}_hip_roll_link">{link(0)}{jnt(s + "_", "hip_roll", side_i)}')
+    w(f'<body name="{s}_hip_yaw_link">{jnt(s + "_", "hip_yaw", side_i)}')
+    w(capsule(f"{s}_thigh", hip, knee, F[s + "_thigh"], m("thigh"), hip))
+    w(f'<body name="{s}_knee_link" pos="{f3(knee - hip)}">{jnt(s + "_", "knee", side_i)}')
+    w(capsule(f"{s}_shin", knee, ank, F[s + "_shin"], m("shin"), knee))
+    w(f'<body name="{s}_ankle_pitch_link" pos="{f3(ank - knee)}">{link(0)}{jnt(s + "_", "ankle_pitch", side_i)}')
+    w(f'<body name="{s}_ankle_roll_link">{jnt(s + "_", "ankle_roll", side_i)}')
+    hz = 0.03  # sole plate: 6 cm tall, bottom on the sole
+    box_c = Vector((fc.x, fc.y, fc.z + hz)) - ank
+    w(
+        f'<geom name="{s}_foot" type="box" size="{fhx:.4f} {fhy:.4f} {hz}" pos="{f3(box_c)}" '
+        f'quat="{math.cos(yaw / 2):.5f} 0 0 {math.sin(yaw / 2):.5f}" mass="{m("foot"):.4f}"/>'
+    )
+    w(f'<site name="{s}_foot" size="0.01" pos="{f3(Vector((fc.x, fc.y, fc.z + 0.02)) - ank)}"/>')
+    w("</body></body></body></body></body></body>")
 lum = L["lumbar"]
 w(f'<body name="waist_yaw_link" pos="{f3(lum - P0)}">{link(0)}{jnt("", "waist_yaw", 0)}')
 w(f'<body name="waist_roll_link">{link(0)}{jnt("", "waist_roll", 0)}')
@@ -258,25 +291,30 @@ w(capsule("neck_collision", L["neck"], L["head"], F["neck"], m("neck"), lum))
 hc, hr = F["head"]
 w(f'<geom name="head_collision" type="sphere" size="{hr:.4f}" pos="{f3(hc - lum)}" mass="{m("head"):.4f}"/>')
 for side_i, s in enumerate(("left", "right")):
-  sh, el, wr, tip = L[s + "_shoulder"], L[s + "_elbow"], L[s + "_wrist"], L[s + "_handtip"]
-  w(f'<body name="{s}_shoulder_pitch_link" pos="{f3(sh - lum)}">{link(0)}{jnt(s + "_", "shoulder_pitch", side_i)}')
-  w(f'<body name="{s}_shoulder_roll_link">{link(0)}{jnt(s + "_", "shoulder_roll", side_i)}')
-  w(f'<body name="{s}_shoulder_yaw_link">{jnt(s + "_", "shoulder_yaw", side_i)}')
-  w(capsule(f"{s}_upper_arm", sh, el, F[s + "_upper_arm"], m("upper_arm"), sh))
-  w(f'<body name="{s}_elbow_link" pos="{f3(el - sh)}">{jnt(s + "_", "elbow", side_i)}')
-  w(capsule(f"{s}_forearm", el, wr, F[s + "_forearm"], m("forearm"), el))
-  w(f'<body name="{s}_wrist_roll_link" pos="{f3(wr - el)}">{link(0)}{jnt(s + "_", "wrist_roll", side_i)}')
-  w(f'<body name="{s}_wrist_pitch_link">{link(0)}{jnt(s + "_", "wrist_pitch", side_i)}')
-  w(f'<body name="{s}_wrist_yaw_link">{jnt(s + "_", "wrist_yaw", side_i)}')
-  w(capsule(f"{s}_hand_collision", wr, tip, F[s + "_hand"], m("hand"), wr))
-  w(f'<site name="{s}_palm" size="0.01" pos="{f3((tip - wr) * 0.6)}"/>')
-  w('</body></body></body></body></body></body></body>')
-w('</body></body></body>')     # torso, waist_roll, waist_yaw
-w('</body>')                   # pelvis
+    sh, el, wr, tip = L[s + "_shoulder"], L[s + "_elbow"], L[s + "_wrist"], L[s + "_handtip"]
+    w(f'<body name="{s}_shoulder_pitch_link" pos="{f3(sh - lum)}">{link(0)}{jnt(s + "_", "shoulder_pitch", side_i)}')
+    w(f'<body name="{s}_shoulder_roll_link">{link(0)}{jnt(s + "_", "shoulder_roll", side_i)}')
+    w(f'<body name="{s}_shoulder_yaw_link">{jnt(s + "_", "shoulder_yaw", side_i)}')
+    w(capsule(f"{s}_upper_arm", sh, el, F[s + "_upper_arm"], m("upper_arm"), sh))
+    w(f'<body name="{s}_elbow_link" pos="{f3(el - sh)}">{jnt(s + "_", "elbow", side_i)}')
+    w(capsule(f"{s}_forearm", el, wr, F[s + "_forearm"], m("forearm"), el))
+    w(f'<body name="{s}_wrist_roll_link" pos="{f3(wr - el)}">{link(0)}{jnt(s + "_", "wrist_roll", side_i)}')
+    w(f'<body name="{s}_wrist_pitch_link">{link(0)}{jnt(s + "_", "wrist_pitch", side_i)}')
+    w(f'<body name="{s}_wrist_yaw_link">{jnt(s + "_", "wrist_yaw", side_i)}')
+    w(capsule(f"{s}_hand_collision", wr, tip, F[s + "_hand"], m("hand"), wr))
+    w(f'<site name="{s}_palm" size="0.01" pos="{f3((tip - wr) * 0.6)}"/>')
+    w("</body></body></body></body></body></body></body>")
+w("</body></body></body>")  # torso, waist_roll, waist_yaw
+w("</body>")  # pelvis
 body_xml = "\n".join(out)
 
-EXCLUDE = [("pelvis", "{s}_hip_yaw_link"), ("{s}_knee_link", "{s}_ankle_roll_link"), ("pelvis", "torso_link"),
-           ("torso_link", "{s}_shoulder_yaw_link"), ("{s}_elbow_link", "{s}_wrist_yaw_link")]
+EXCLUDE = [
+    ("pelvis", "{s}_hip_yaw_link"),
+    ("{s}_knee_link", "{s}_ankle_roll_link"),
+    ("pelvis", "torso_link"),
+    ("torso_link", "{s}_shoulder_yaw_link"),
+    ("{s}_elbow_link", "{s}_wrist_yaw_link"),
+]
 excl = sorted({(a.format(s=s), b.format(s=s)) for a, b in EXCLUDE for s in ("left", "right")})
 
 # keyframes: arms in toward the body, slight crouch (knees_bent = env default pose and reset)
@@ -284,50 +322,64 @@ order = [a[0] for a in ACT]
 
 
 def pose(**kw):
-  return " ".join(f"{kw.get(n.replace('_joint', ''), 0.0):.4g}" for n in order)
+    return " ".join(f"{kw.get(n.replace('_joint', ''), 0.0):.4g}" for n in order)
 
 
 # knees_bent is the env's default pose: the PD targets are default + action * scale and the pose costs pull towards
 # it. An upright stance (knee 0.25) was tried (m10, m11) and both settled into standing still: with the stock 2 m/s
 # pushes (see matt/env.py) an upright body cannot ride out a kick. Revisit with the race-scale pushes.
-bent = dict(left_hip_pitch=-0.25, right_hip_pitch=-0.25, left_knee=0.5, right_knee=0.5, left_ankle_pitch=-0.25,
-            right_ankle_pitch=-0.25, left_shoulder_roll=-0.3, right_shoulder_roll=0.3, left_elbow=-0.3, right_elbow=-0.3)
+bent = dict(
+    left_hip_pitch=-0.25,
+    right_hip_pitch=-0.25,
+    left_knee=0.5,
+    right_knee=0.5,
+    left_ankle_pitch=-0.25,
+    right_ankle_pitch=-0.25,
+    left_shoulder_roll=-0.3,
+    right_shoulder_roll=0.3,
+    left_elbow=-0.3,
+    right_elbow=-0.3,
+)
 home = dict(left_shoulder_roll=-0.3, right_shoulder_roll=0.3, left_elbow=-0.15, right_elbow=-0.15)
 
-sensors = "\n".join([
-  '<framezaxis objtype="site" objname="imu_in_torso" name="upvector_torso"/>',
-  '<velocimeter site="imu_in_torso" name="local_linvel_torso"/>',
-  '<velocimeter site="imu_in_pelvis" name="local_linvel_pelvis"/>',
-  '<accelerometer site="imu_in_torso" name="accelerometer_torso"/>',
-  '<accelerometer site="imu_in_pelvis" name="accelerometer_pelvis"/>',
-  '<gyro site="imu_in_torso" name="gyro_torso"/>',
-  '<gyro site="imu_in_pelvis" name="gyro_pelvis"/>',
-  '<framezaxis objtype="site" objname="imu_in_pelvis" name="upvector_pelvis"/>',
-  '<framexaxis objtype="site" objname="imu_in_torso" name="forwardvector_torso"/>',
-  '<framexaxis objtype="site" objname="imu_in_pelvis" name="forwardvector_pelvis"/>',
-  '<framequat objtype="site" objname="imu_in_torso" name="orientation_torso"/>',
-  '<framequat objtype="site" objname="imu_in_pelvis" name="orientation_pelvis"/>',
-  '<framelinvel objtype="site" objname="imu_in_torso" name="global_linvel_torso"/>',
-  '<framelinvel objtype="site" objname="imu_in_pelvis" name="global_linvel_pelvis"/>',
-  '<frameangvel objtype="site" objname="imu_in_torso" name="global_angvel_torso"/>',
-  '<frameangvel objtype="site" objname="imu_in_pelvis" name="global_angvel_pelvis"/>',
-  '<framelinvel objtype="site" objname="left_foot" name="left_foot_global_linvel"/>',
-  '<framelinvel objtype="site" objname="right_foot" name="right_foot_global_linvel"/>',
-  '<framezaxis objtype="site" objname="left_foot" name="left_foot_upvector"/>',
-  '<framezaxis objtype="site" objname="right_foot" name="right_foot_upvector"/>',
-  '<force site="left_foot" name="left_foot_force"/>',
-  '<force site="right_foot" name="right_foot_force"/>',
-  '<contact geom1="left_foot" geom2="floor" reduce="mindist" name="left_foot_floor_found"/>',
-  '<contact geom1="right_foot" geom2="floor" reduce="mindist" name="right_foot_floor_found"/>',
-  '<contact geom1="right_foot" geom2="left_foot" reduce="mindist" name="right_foot_left_foot_found"/>',
-  '<contact geom1="left_foot" geom2="right_shin" reduce="mindist" name="left_foot_right_shin_found"/>',
-  '<contact geom1="right_foot" geom2="left_shin" reduce="mindist" name="right_foot_left_shin_found"/>',
-  '<contact geom1="left_hand_collision" geom2="left_thigh" reduce="mindist" name="left_hand_left_thigh_found"/>',
-  '<contact geom1="right_hand_collision" geom2="right_thigh" reduce="mindist" name="right_hand_right_thigh_found"/>',
-])
+sensors = "\n".join(
+    [
+        '<framezaxis objtype="site" objname="imu_in_torso" name="upvector_torso"/>',
+        '<velocimeter site="imu_in_torso" name="local_linvel_torso"/>',
+        '<velocimeter site="imu_in_pelvis" name="local_linvel_pelvis"/>',
+        '<accelerometer site="imu_in_torso" name="accelerometer_torso"/>',
+        '<accelerometer site="imu_in_pelvis" name="accelerometer_pelvis"/>',
+        '<gyro site="imu_in_torso" name="gyro_torso"/>',
+        '<gyro site="imu_in_pelvis" name="gyro_pelvis"/>',
+        '<framezaxis objtype="site" objname="imu_in_pelvis" name="upvector_pelvis"/>',
+        '<framexaxis objtype="site" objname="imu_in_torso" name="forwardvector_torso"/>',
+        '<framexaxis objtype="site" objname="imu_in_pelvis" name="forwardvector_pelvis"/>',
+        '<framequat objtype="site" objname="imu_in_torso" name="orientation_torso"/>',
+        '<framequat objtype="site" objname="imu_in_pelvis" name="orientation_pelvis"/>',
+        '<framelinvel objtype="site" objname="imu_in_torso" name="global_linvel_torso"/>',
+        '<framelinvel objtype="site" objname="imu_in_pelvis" name="global_linvel_pelvis"/>',
+        '<frameangvel objtype="site" objname="imu_in_torso" name="global_angvel_torso"/>',
+        '<frameangvel objtype="site" objname="imu_in_pelvis" name="global_angvel_pelvis"/>',
+        '<framelinvel objtype="site" objname="left_foot" name="left_foot_global_linvel"/>',
+        '<framelinvel objtype="site" objname="right_foot" name="right_foot_global_linvel"/>',
+        '<framezaxis objtype="site" objname="left_foot" name="left_foot_upvector"/>',
+        '<framezaxis objtype="site" objname="right_foot" name="right_foot_upvector"/>',
+        '<force site="left_foot" name="left_foot_force"/>',
+        '<force site="right_foot" name="right_foot_force"/>',
+        '<contact geom1="left_foot" geom2="floor" reduce="mindist" name="left_foot_floor_found"/>',
+        '<contact geom1="right_foot" geom2="floor" reduce="mindist" name="right_foot_floor_found"/>',
+        '<contact geom1="right_foot" geom2="left_foot" reduce="mindist" name="right_foot_left_foot_found"/>',
+        '<contact geom1="left_foot" geom2="right_shin" reduce="mindist" name="left_foot_right_shin_found"/>',
+        '<contact geom1="right_foot" geom2="left_shin" reduce="mindist" name="right_foot_left_shin_found"/>',
+        '<contact geom1="left_hand_collision" geom2="left_thigh" reduce="mindist" name="left_hand_left_thigh_found"/>',
+        '<contact geom1="right_hand_collision" geom2="right_thigh" reduce="mindist" name="right_hand_right_thigh_found"/>',
+    ]
+)
 actuators = "\n".join(
-  f'<general name="{n}" joint="{n}" ctrlrange="{lo} {hi}" forcerange="-{fr} {fr}" forcelimited="true" '
-  f'biastype="affine" gainprm="{kp}" biasprm="0 -{kp}"/>' for n, lo, hi, kp, fr in ACT)
+    f'<general name="{n}" joint="{n}" ctrlrange="{lo} {hi}" forcerange="-{fr} {fr}" forcelimited="true" '
+    f'biastype="affine" gainprm="{kp}" biasprm="0 -{kp}"/>'
+    for n, lo, hi, kp, fr in ACT
+)
 
 xml = f"""<mujoco model="{CREATURE} scene">
   <!-- generated by tools/blender/matt_mjcf.py from {PRO["src"]}: do not edit by hand -->
@@ -367,13 +419,20 @@ xml = f"""<mujoco model="{CREATURE} scene">
 """
 os.makedirs(os.path.join(OUT, "assets"), exist_ok=True)
 with open(os.path.join(OUT, "assets", f"{CREATURE}_porace.xml"), "w") as fh:
-  fh.write(xml)
-fit = {"landmarks": {k: list(v) for k, v in L.items()},
-       "fits": {k: (v if isinstance(v, float) else [list(x) if isinstance(x, Vector) else x for x in v]) for k, v in F.items()},
-       "body_mass": BODY_MASS, "joint_order": order}
+    fh.write(xml)
+fit = {
+    "landmarks": {k: list(v) for k, v in L.items()},
+    "fits": {
+        k: (v if isinstance(v, float) else [list(x) if isinstance(x, Vector) else x for x in v]) for k, v in F.items()
+    },
+    "body_mass": BODY_MASS,
+    "joint_order": order,
+}
 with open(os.path.join(OUT, "fit.json"), "w") as fh:
-  json.dump(fit, fh, indent=1)
-print(f"[mjcf] {len(order)} joints, {len(excl)} excludes; pelvis z {P0.z:.3f}; radii thigh {F['left_thigh']:.3f} "
-      f"shin {F['left_shin']:.3f} upper arm {F['left_upper_arm']:.3f} forearm {F['left_forearm']:.3f} head {F['head'][1]:.3f}; "
-      f"pelvis r {F['pelvis'][2]:.3f} half {F['pelvis'][1]:.3f}, abdomen r {F['abdomen'][2]:.3f}, chest r {F['chest'][2]:.3f} "
-      f"half {F['chest'][1]:.3f}; foot {2 * F['left_foot'][1]:.3f} x {2 * F['left_foot'][2]:.3f} m, toe-out {math.degrees(F['left_foot'][3]):.0f} deg")
+    json.dump(fit, fh, indent=1)
+print(
+    f"[mjcf] {len(order)} joints, {len(excl)} excludes; pelvis z {P0.z:.3f}; radii thigh {F['left_thigh']:.3f} "
+    f"shin {F['left_shin']:.3f} upper arm {F['left_upper_arm']:.3f} forearm {F['left_forearm']:.3f} head {F['head'][1]:.3f}; "
+    f"pelvis r {F['pelvis'][2]:.3f} half {F['pelvis'][1]:.3f}, abdomen r {F['abdomen'][2]:.3f}, chest r {F['chest'][2]:.3f} "
+    f"half {F['chest'][1]:.3f}; foot {2 * F['left_foot'][1]:.3f} x {2 * F['left_foot'][2]:.3f} m, toe-out {math.degrees(F['left_foot'][3]):.0f} deg"
+)

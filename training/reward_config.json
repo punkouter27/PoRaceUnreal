@@ -1,0 +1,18 @@
+{
+  "_doc": "Reward penalty weights and curriculum (rung) pass thresholds for the PoRace trainers. Read by training/reward_config.py (go2/joystick.py, matt/env.py incl. Grandma, eval.py) and mirrored by the Unreal DataAsset URaceRewardConfig (Source/PoRaceUnreal/RaceRewardConfig.h); tests/test_reward_config.py checks both. Weights are added to the per-step reward as weight * term (negative = penalty). torque_sq = sum(actuator force^2); joint_ang_vel_sq = sum(joint qvel^2); action_rate_sq = |a_t - a_{t-1}|^2; foot_slip = sum over feet in contact of |foot planar velocity|^2. The shipped brains predate this file (torque_sq and joint_ang_vel_sq were added 2026-11-20, and the humans' action_rate / foot_slip weights were 0 / stock pelvis-slip): they were NOT retrained.",
+  "penalties": {
+    "torque_sq": -1e-05,
+    "joint_ang_vel_sq": -0.0001,
+    "action_rate_sq": -0.01,
+    "foot_slip": -0.1
+  },
+  "curriculum": [
+    {"stage": "r0", "threshold": 1.0, "metric": "pass fraction of seeded eval episodes: stand 10 s on a zero command"},
+    {"stage": "r1", "threshold": 1.0, "metric": "pass fraction: velocity tracking error < 0.2 m/s"},
+    {"stage": "r2", "threshold": 0.9, "metric": "pass fraction: 30 N.s push + 1 kg cube drop"},
+    {"stage": "r3", "threshold": 0.9, "metric": "pass fraction: standing within 3 s from fallen (getup)"},
+    {"stage": "speed", "threshold": 0.9, "metric": "pass fraction: forward speed >= 90 % of the command"},
+    {"stage": "bank", "threshold": 0.9, "metric": "pass fraction: 15 deg slope, straight + circling"},
+    {"stage": "steeple", "threshold": 0.9, "metric": "pass fraction over 100 held-out episodes, zero NaN (graduation gate)"}
+  ]
+}

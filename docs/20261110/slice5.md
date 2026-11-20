@@ -4,7 +4,7 @@ Result: **PASS**. Tactics, yellow flag, handicap, bump count and contact audit r
 Unreal, line for line; every Unreal race below is identical to Python on the same model (result line, pass events and
 contact audit).
 
-## Checks (`Scripts/regress.ps1`)
+## Checks (`scripts/regress.ps1`)
 
 | Run | Seeds | Result |
 |---|---|---|

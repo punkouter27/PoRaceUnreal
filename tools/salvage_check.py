@@ -10,6 +10,7 @@ Checks, each printed as one OK / FAIL row:
   4. the converted track and character cards are present and well formed
 Exit code 1 if any row fails.
 """
+
 import argparse
 import hashlib
 import json
@@ -29,12 +30,7 @@ TREES = [
     ("Assets/Art/Exports/GLB", "Content/Art/Exports"),
     ("docs", "docs"),
     ("SCREENSHOTS", "docs/unity_screens"),
-    ("Assets/Scripts", "reference/unity/Assets/Scripts"),
-    ("Assets/Editor", "reference/unity/Assets/Editor"),
-    ("Assets/Tests", "reference/unity/Assets/Tests"),
-    ("Assets/Resources", "reference/unity/Assets/Resources"),
-    ("Assets/Generated", "reference/unity/Assets/Generated"),
-    ("Assets/Shaders", "reference/unity/Assets/Shaders"),
+    # The Unity C# copy (reference/unity/) was removed once the port was complete (tasks plan 14.4).
 ]
 FILES = [
     ("GrandmaRiggedUnity.fbx", "Content/Art/Raw/Grandma/GrandmaRiggedUnity.fbx"),
@@ -100,9 +96,17 @@ def check_copies(source: Path):
     for s, d in TREES:
         src, dst = source / s, ROOT / d
         files = [p for p in src.rglob("*") if p.is_file() and wanted(p.relative_to(src))]
-        bad = [str(p.relative_to(src)) for p in files
-               if not (dst / p.relative_to(src)).is_file() or sha(p) != sha(dst / p.relative_to(src))]
-        row("copy", f"{s} -> {d}", bool(files) and not bad, f"{len(files)} files" + (f", differ/missing: {bad[:3]}" if bad else ""))
+        bad = [
+            str(p.relative_to(src))
+            for p in files
+            if not (dst / p.relative_to(src)).is_file() or sha(p) != sha(dst / p.relative_to(src))
+        ]
+        row(
+            "copy",
+            f"{s} -> {d}",
+            bool(files) and not bad,
+            f"{len(files)} files" + (f", differ/missing: {bad[:3]}" if bad else ""),
+        )
     for s, d in FILES:
         ok = (source / s).is_file() and (ROOT / d).is_file() and sha(source / s) == sha(ROOT / d)
         row("copy", f"{s} -> {d}", ok)
@@ -111,6 +115,7 @@ def check_copies(source: Path):
 def check_brains():
     import numpy as np
     import onnxruntime as ort
+
     for rel, (n_obs, n_act) in BRAINS.items():
         try:
             s = ort.InferenceSession(str(ROOT / rel), providers=["CPUExecutionProvider"])
@@ -124,6 +129,7 @@ def check_brains():
 
 def check_models():
     import mujoco
+
     for rel, nu in MODELS.items():
         try:
             m = mujoco.MjModel.from_xml_path(str(ROOT / rel))
@@ -142,14 +148,24 @@ def check_cards():
         try:
             t = json.loads(p.read_text(encoding="utf-8"))
             ok = len(t["centerline"]) >= 2 and t["halfWidth"] > 0
-            row("card", str(p.relative_to(ROOT)), ok, f"{t['displayName']}, {len(t['centerline'])} points, closed={t['closed']}")
+            row(
+                "card",
+                str(p.relative_to(ROOT)),
+                ok,
+                f"{t['displayName']}, {len(t['centerline'])} points, closed={t['closed']}",
+            )
         except Exception as e:  # noqa: BLE001
             row("card", f"training/tracks/{name}.json", False, f"{type(e).__name__}: {e}")
     for name in CHARACTERS:
         p = ROOT / "training" / "characters" / f"{name}.json"
         try:
             c = json.loads(p.read_text(encoding="utf-8"))
-            row("card", str(p.relative_to(ROOT)), bool(c["displayName"]), f"{c['displayName']}, raceable={c.get('raceable')}")
+            row(
+                "card",
+                str(p.relative_to(ROOT)),
+                bool(c["displayName"]),
+                f"{c['displayName']}, raceable={c.get('raceable')}",
+            )
         except Exception as e:  # noqa: BLE001
             row("card", f"training/characters/{name}.json", False, f"{type(e).__name__}: {e}")
 

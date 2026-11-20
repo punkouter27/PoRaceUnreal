@@ -6,6 +6,7 @@ Steeplechase graduation (s4-s7, G.10) and the faster dog (r8-r10, F.9). Reads Te
 policy loss), the gate logs written by gate300.sh / gateall.sh / gatespeed.sh (runs/<run>_gates.log) and the s2 gate
 it is compared with. Three milestone tiers, the three charts that carry the result, deltas against the previous runs.
 """
+
 import datetime
 import html
 import re
@@ -14,105 +15,208 @@ from pathlib import Path
 from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
 
 ROOT = Path(__file__).resolve().parent
-OUT = Path("/docs/report/session_20261027.html") if Path("/docs").exists() else ROOT.parent / "docs" / "report" / "session_20261027.html"
-STEEPLE = {"s4": "#9ca3af", "s5": "#d97706", "s6": "#7c3aed", "s7": "#2563eb", "s8": "#0891b2", "s9": "#dc2626", "s10": "#65a30d"}
+OUT = (
+    Path("/docs/report/session_20261027.html")
+    if Path("/docs").exists()
+    else ROOT.parent / "docs" / "report" / "session_20261027.html"
+)
+STEEPLE = {
+    "s4": "#9ca3af",
+    "s5": "#d97706",
+    "s6": "#7c3aed",
+    "s7": "#2563eb",
+    "s8": "#0891b2",
+    "s9": "#dc2626",
+    "s10": "#65a30d",
+}
 SPEED = {"r8": "#9ca3af", "r9": "#d97706", "r10": "#7c3aed", "r11": "#db2777", "r12": "#0891b2", "r13": "#059669"}
-LABEL = {"s4": "s4: lr 1e-4, outer spawns", "s5": "s5: swing 0.13 m", "s6": "s6: continue", "s7": "s7: pushes to 7 m/s",
-         "s8": "s8: lr 5e-5 polish", "s9": "s9: swing 0.14, outer 0.7", "s10": "s10: entropy 0.005", "r8": "r8: speed-scaled sigma", "r9": "r9: sharp sigma, progress x2", "r10": "r10: lr 5e-5",
-         "r11": "r11: effort penalties x0.25", "r12": "r12: continue", "r13": "r13: progress x3, lr 5e-5"}
+LABEL = {
+    "s4": "s4: lr 1e-4, outer spawns",
+    "s5": "s5: swing 0.13 m",
+    "s6": "s6: continue",
+    "s7": "s7: pushes to 7 m/s",
+    "s8": "s8: lr 5e-5 polish",
+    "s9": "s9: swing 0.14, outer 0.7",
+    "s10": "s10: entropy 0.005",
+    "r8": "r8: speed-scaled sigma",
+    "r9": "r9: sharp sigma, progress x2",
+    "r10": "r10: lr 5e-5",
+    "r11": "r11: effort penalties x0.25",
+    "r12": "r12: continue",
+    "r13": "r13: progress x3, lr 5e-5",
+}
 # Steps restarted from: each run continues the previous best, so the x axis is cumulative steps since s2 @ 68.8M / s7 @ 68.8M.
-OFFSET = {"s4": 0, "s5": 22.9e6, "s6": 22.9e6 + 80.3e6, "s7": 22.9e6 + 80.3e6 + 54.1e6, "s8": 22.9e6 + 80.3e6 + 54.1e6 + 68.8e6, "s9": 22.9e6 + 80.3e6 + 54.1e6 + 68.8e6, "s10": 22.9e6 + 80.3e6 + 54.1e6 + 68.8e6,
-          "r8": 0, "r9": 0, "r10": 68.8e6, "r11": 68.8e6 + 45.9e6, "r12": 68.8e6 + 45.9e6 + 103.2e6, "r13": 68.8e6 + 45.9e6 + 103.2e6 + 54.1e6}
+OFFSET = {
+    "s4": 0,
+    "s5": 22.9e6,
+    "s6": 22.9e6 + 80.3e6,
+    "s7": 22.9e6 + 80.3e6 + 54.1e6,
+    "s8": 22.9e6 + 80.3e6 + 54.1e6 + 68.8e6,
+    "s9": 22.9e6 + 80.3e6 + 54.1e6 + 68.8e6,
+    "s10": 22.9e6 + 80.3e6 + 54.1e6 + 68.8e6,
+    "r8": 0,
+    "r9": 0,
+    "r10": 68.8e6,
+    "r11": 68.8e6 + 45.9e6,
+    "r12": 68.8e6 + 45.9e6 + 103.2e6,
+    "r13": 68.8e6 + 45.9e6 + 103.2e6 + 54.1e6,
+}
 
 
 def scalars(run, tag):
-  p = ROOT / "runs" / run / "tb"
-  if not p.exists(): return []
-  ea = EventAccumulator(str(p)); ea.Reload()
-  if tag not in ea.Tags()["scalars"]: return []
-  return sorted({(e.step + OFFSET[run], e.value) for e in ea.Scalars(tag) if e.value == e.value})
+    p = ROOT / "runs" / run / "tb"
+    if not p.exists():
+        return []
+    ea = EventAccumulator(str(p))
+    ea.Reload()
+    if tag not in ea.Tags()["scalars"]:
+        return []
+    return sorted({(e.step + OFFSET[run], e.value) for e in ea.Scalars(tag) if e.value == e.value})
 
 
 def gates(run):
-  """{step: line} from runs/<run>_gates.log; a later line for the same step (a corrected re-run) wins."""
-  p = ROOT / "runs" / f"{run}_gates.log"; out = {}
-  if not p.exists():   # s4 was gated by hand (gate100.sh): runs/<run>_gate_<M>M.log
-    for f in sorted((ROOT / "runs").glob(f"{run}_gate_*M.log")):
-      m = re.match(rf"{run}_gate_([\d.]+)M\.log$", f.name); last = f.read_text(errors="ignore").strip().splitlines()
-      if m and last: out[int(round(float(m[1]) * 1e6 / 1146880)) * 1146880] = f"{run} {m[1]}M: {last[-1]}"
+    """{step: line} from runs/<run>_gates.log; a later line for the same step (a corrected re-run) wins."""
+    p = ROOT / "runs" / f"{run}_gates.log"
+    out = {}
+    if not p.exists():  # s4 was gated by hand (gate100.sh): runs/<run>_gate_<M>M.log
+        for f in sorted((ROOT / "runs").glob(f"{run}_gate_*M.log")):
+            m = re.match(rf"{run}_gate_([\d.]+)M\.log$", f.name)
+            last = f.read_text(errors="ignore").strip().splitlines()
+            if m and last:
+                out[int(round(float(m[1]) * 1e6 / 1146880)) * 1146880] = f"{run} {m[1]}M: {last[-1]}"
+        return out
+    for line in p.read_text(errors="ignore").splitlines():
+        m = re.match(r"^(\d+) (.*)$", line)
+        if m:
+            out[int(m[1])] = m[2]
     return out
-  for line in p.read_text(errors="ignore").splitlines():
-    m = re.match(r"^(\d+) (.*)$", line)
-    if m: out[int(m[1])] = m[2]
-  return out
 
 
 def steeple_rate(line):
-  m = re.search(r"GATE300 (\d+)/300", line) or re.search(r"STEEPLE: (\d+)/100", line)
-  if not m: return None
-  return int(m[1]) / (3 if "GATE300" in line else 1)
+    m = re.search(r"GATE300 (\d+)/300", line) or re.search(r"STEEPLE: (\d+)/100", line)
+    if not m:
+        return None
+    return int(m[1]) / (3 if "GATE300" in line else 1)
 
 
 def speed_means(line):
-  m = re.search(r"mean 2\.0->([\d.]+) 2\.5->([\d.]+)", line)
-  return (float(m[1]), float(m[2])) if m else None
+    m = re.search(r"mean 2\.0->([\d.]+) 2\.5->([\d.]+)", line)
+    return (float(m[1]), float(m[2])) if m else None
 
 
 def chart(series, title, ylabel, hlines=()):
-  W, H, L, B, T, R = 680, 300, 60, 40, 40, 20
-  pts = [p for _, s, _ in series for p in s]
-  if not pts: return f"<p>No data for {html.escape(title)}.</p>"
-  x1 = max(x for x, _ in pts) * 1.03; ys = [y for _, y in pts] + [h for h, _ in hlines]
-  y0, y1 = min(ys), max(ys); pad = (y1 - y0) * 0.12 or 1; y0 -= pad; y1 += pad
-  sx = lambda x: L + x / x1 * (W - L - R); sy = lambda y: H - B - (y - y0) / (y1 - y0) * (H - B - T)
-  g = [f'<svg viewBox="0 0 {W} {H}" role="img" aria-label="{html.escape(title)}"><text x="{L}" y="22" class="ct">{html.escape(title)}</text>']
-  for i in range(5):
-    y = y0 + (y1 - y0) * i / 4
-    g.append(f'<line x1="{L}" y1="{sy(y):.1f}" x2="{W - R}" y2="{sy(y):.1f}" class="gl"/><text x="{L - 6}" y="{sy(y) + 4:.1f}" class="tk" text-anchor="end">{y:.3g}</text>')
-  for i in range(6):
-    x = x1 * i / 5
-    g.append(f'<text x="{sx(x):.1f}" y="{H - B + 16}" class="tk" text-anchor="middle">{x / 1e6:.0f}M</text>')
-  g.append(f'<text x="{(W + L) / 2:.0f}" y="{H - 6}" class="tk" text-anchor="middle">training steps (cumulative over the chain of runs)</text>')
-  g.append(f'<text transform="translate(14,{(H - B + T) / 2:.0f}) rotate(-90)" class="tk" text-anchor="middle">{html.escape(ylabel)}</text>')
-  for h, label in hlines:
-    g.append(f'<line x1="{L}" y1="{sy(h):.1f}" x2="{W - R}" y2="{sy(h):.1f}" class="bar"/><text x="{W - R - 4}" y="{sy(h) - 5:.1f}" class="tk" text-anchor="end">{html.escape(label)}</text>')
-  for name, s, color in series:
-    if len(s) > 1: g.append(f'<polyline fill="none" stroke="{color}" stroke-width="2.5" points="{" ".join(f"{sx(x):.1f},{sy(y):.1f}" for x, y in s)}"/>')
-    g += [f'<circle cx="{sx(x):.1f}" cy="{sy(y):.1f}" r="3.5" fill="{color}"><title>{name} {x / 1e6:.1f}M: {y:.3g}</title></circle>' for x, y in s]
-  g.append("</svg>")
-  legend = " ".join(f'<span class="key"><i style="background:{c}"></i>{html.escape(LABEL.get(n, n))}</span>' for n, _, c in series)
-  return "\n".join(g) + f'<div class="legend">{legend}</div>'
+    W, H, L, B, T, R = 680, 300, 60, 40, 40, 20
+    pts = [p for _, s, _ in series for p in s]
+    if not pts:
+        return f"<p>No data for {html.escape(title)}.</p>"
+    x1 = max(x for x, _ in pts) * 1.03
+    ys = [y for _, y in pts] + [h for h, _ in hlines]
+    y0, y1 = min(ys), max(ys)
+    pad = (y1 - y0) * 0.12 or 1
+    y0 -= pad
+    y1 += pad
+    sx = lambda x: L + x / x1 * (W - L - R)
+    sy = lambda y: H - B - (y - y0) / (y1 - y0) * (H - B - T)
+    g = [
+        f'<svg viewBox="0 0 {W} {H}" role="img" aria-label="{html.escape(title)}"><text x="{L}" y="22" class="ct">{html.escape(title)}</text>'
+    ]
+    for i in range(5):
+        y = y0 + (y1 - y0) * i / 4
+        g.append(
+            f'<line x1="{L}" y1="{sy(y):.1f}" x2="{W - R}" y2="{sy(y):.1f}" class="gl"/><text x="{L - 6}" y="{sy(y) + 4:.1f}" class="tk" text-anchor="end">{y:.3g}</text>'
+        )
+    for i in range(6):
+        x = x1 * i / 5
+        g.append(f'<text x="{sx(x):.1f}" y="{H - B + 16}" class="tk" text-anchor="middle">{x / 1e6:.0f}M</text>')
+    g.append(
+        f'<text x="{(W + L) / 2:.0f}" y="{H - 6}" class="tk" text-anchor="middle">training steps (cumulative over the chain of runs)</text>'
+    )
+    g.append(
+        f'<text transform="translate(14,{(H - B + T) / 2:.0f}) rotate(-90)" class="tk" text-anchor="middle">{html.escape(ylabel)}</text>'
+    )
+    for h, label in hlines:
+        g.append(
+            f'<line x1="{L}" y1="{sy(h):.1f}" x2="{W - R}" y2="{sy(h):.1f}" class="bar"/><text x="{W - R - 4}" y="{sy(h) - 5:.1f}" class="tk" text-anchor="end">{html.escape(label)}</text>'
+        )
+    for name, s, color in series:
+        if len(s) > 1:
+            g.append(
+                f'<polyline fill="none" stroke="{color}" stroke-width="2.5" points="{" ".join(f"{sx(x):.1f},{sy(y):.1f}" for x, y in s)}"/>'
+            )
+        g += [
+            f'<circle cx="{sx(x):.1f}" cy="{sy(y):.1f}" r="3.5" fill="{color}"><title>{name} {x / 1e6:.1f}M: {y:.3g}</title></circle>'
+            for x, y in s
+        ]
+    g.append("</svg>")
+    legend = " ".join(
+        f'<span class="key"><i style="background:{c}"></i>{html.escape(LABEL.get(n, n))}</span>' for n, _, c in series
+    )
+    return "\n".join(g) + f'<div class="legend">{legend}</div>'
 
 
 def main():
-  sg = {r: gates(r) for r in STEEPLE}; vg = {r: gates(r) for r in SPEED}
-  steeple_series = [(r, [(s + OFFSET[r], v) for s, l in sorted(sg[r].items()) if (v := steeple_rate(l)) is not None], c) for r, c in STEEPLE.items()]
-  speed_series = [(r, [(s + OFFSET[r], m[1]) for s, l in sorted(vg[r].items()) if (m := speed_means(l))], c) for r, c in SPEED.items()]
-  loss_series = [(r, scalars(r, "training/v_loss"), c) for r, c in {**STEEPLE, **SPEED}.items()]
-  nan_runs = [r for r in list(STEEPLE) + list(SPEED) if "NAN" in (ROOT / "runs" / f"{r}.log").read_text(errors="ignore")]
+    sg = {r: gates(r) for r in STEEPLE}
+    vg = {r: gates(r) for r in SPEED}
+    steeple_series = [
+        (r, [(s + OFFSET[r], v) for s, l in sorted(sg[r].items()) if (v := steeple_rate(l)) is not None], c)
+        for r, c in STEEPLE.items()
+    ]
+    speed_series = [
+        (r, [(s + OFFSET[r], m[1]) for s, l in sorted(vg[r].items()) if (m := speed_means(l))], c)
+        for r, c in SPEED.items()
+    ]
+    loss_series = [(r, scalars(r, "training/v_loss"), c) for r, c in {**STEEPLE, **SPEED}.items()]
+    nan_runs = [
+        r for r in list(STEEPLE) + list(SPEED) if "NAN" in (ROOT / "runs" / f"{r}.log").read_text(errors="ignore")
+    ]
 
-  grad = [(r, s, l) for r in STEEPLE for s, l in sg[r].items() if "ALL-PASS" in l]
-  best_speed = max(((r, s, m) for r in SPEED for s, l in vg[r].items() if (m := speed_means(l))), key=lambda x: x[2][1], default=None)
-  speed_pass = [(r, s, l) for r in SPEED for s, l in vg[r].items() if "ALL-PASS" in l]
+    grad = [(r, s, l) for r in STEEPLE for s, l in sg[r].items() if "ALL-PASS" in l]
+    best_speed = max(
+        ((r, s, m) for r in SPEED for s, l in vg[r].items() if (m := speed_means(l))),
+        key=lambda x: x[2][1],
+        default=None,
+    )
+    speed_pass = [(r, s, l) for r in SPEED for s, l in vg[r].items() if "ALL-PASS" in l]
 
-  def tier(ok, text): return f'<li class="{"ok" if ok else "no"}"><b>{"reached" if ok else "not reached"}</b> {text}</li>'
-  tiers = [tier(True, "<b>Toddler / Beginner</b>: every run keeps R1 (flat tracking, 20/20) and bank 15 deg (30/30) at every gated checkpoint."),
-           tier(bool(grad), "<b>Child / Intermediate</b>: steeplechase graduation on held-out seeds with R2 intact (s7 @ 68.8M: 277/300, R2 30/30), "
-                            "Track04 40/40 racers finish."),
-           tier(bool(speed_pass), "<b>Adult / Advanced</b>: faster dog, 2.0 and 2.5 m/s commands held at 90 % from standstill (speed rung 9/10) "
-                                  "without losing R1 / R2 / bank.")]
+    def tier(ok, text):
+        return f'<li class="{"ok" if ok else "no"}"><b>{"reached" if ok else "not reached"}</b> {text}</li>'
 
-  rows = []
-  for r in STEEPLE:
-    for s, l in sorted(sg[r].items()):
-      rows.append(f"<tr><td>{r}</td><td>{s / 1e6:.1f}</td><td>{html.escape(l.split(':', 1)[1].strip() if ':' in l else l)}</td></tr>")
-  srows = []
-  for r in SPEED:
-    for s, l in sorted(vg[r].items()):
-      srows.append(f"<tr><td>{r}</td><td>{s / 1e6:.1f}</td><td>{html.escape(l.split(':', 1)[1].strip() if ':' in l else l)}</td></tr>")
+    tiers = [
+        tier(
+            True,
+            "<b>Toddler / Beginner</b>: every run keeps R1 (flat tracking, 20/20) and bank 15 deg (30/30) at every gated checkpoint.",
+        ),
+        tier(
+            bool(grad),
+            "<b>Child / Intermediate</b>: steeplechase graduation on held-out seeds with R2 intact (s7 @ 68.8M: 277/300, R2 30/30), "
+            "Track04 40/40 racers finish.",
+        ),
+        tier(
+            bool(speed_pass),
+            "<b>Adult / Advanced</b>: faster dog, 2.0 and 2.5 m/s commands held at 90 % from standstill (speed rung 9/10) "
+            "without losing R1 / R2 / bank.",
+        ),
+    ]
 
-  best = f"{best_speed[0]} @ {best_speed[1] / 1e6:.1f}M: 2.0 -> {best_speed[2][0]:.2f}, 2.5 -> {best_speed[2][1]:.2f} m/s" if best_speed else "-"
-  doc = f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+    rows = []
+    for r in STEEPLE:
+        for s, l in sorted(sg[r].items()):
+            rows.append(
+                f"<tr><td>{r}</td><td>{s / 1e6:.1f}</td><td>{html.escape(l.split(':', 1)[1].strip() if ':' in l else l)}</td></tr>"
+            )
+    srows = []
+    for r in SPEED:
+        for s, l in sorted(vg[r].items()):
+            srows.append(
+                f"<tr><td>{r}</td><td>{s / 1e6:.1f}</td><td>{html.escape(l.split(':', 1)[1].strip() if ':' in l else l)}</td></tr>"
+            )
+
+    best = (
+        f"{best_speed[0]} @ {best_speed[1] / 1e6:.1f}M: 2.0 -> {best_speed[2][0]:.2f}, 2.5 -> {best_speed[2][1]:.2f} m/s"
+        if best_speed
+        else "-"
+    )
+    doc = f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Training Session Report</title><style>
 :root{{--bg:#f6f7f9;--card:#fff;--ink:#1d2330;--muted:#5d6675;--line:#dde1e7}}
 @media (prefers-color-scheme:dark){{:root{{--bg:#12151b;--card:#1b2029;--ink:#e8ebf0;--muted:#9aa3b2;--line:#2c3340}}}}
@@ -153,10 +257,10 @@ on the CPU while the next one trained (<code>training/autogate.sh</code>). Tenso
 <div class="card"><table><tr><th>run</th><th>step (M)</th><th>steeple gate (300 seeds) and rungs</th></tr>{"".join(rows)}</table></div>
 <div class="card"><table><tr><th>run</th><th>step (M)</th><th>speed rung and rungs</th></tr>{"".join(srows)}</table></div>
 </main></body></html>"""
-  OUT.parent.mkdir(parents=True, exist_ok=True)
-  OUT.write_text(doc)
-  print("wrote", OUT)
+    OUT.parent.mkdir(parents=True, exist_ok=True)
+    OUT.write_text(doc)
+    print("wrote", OUT)
 
 
 if __name__ == "__main__":
-  main()
+    main()

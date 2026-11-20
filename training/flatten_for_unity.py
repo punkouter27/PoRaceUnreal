@@ -2,6 +2,7 @@
 (which cannot read <include>, <keyframe> or <contact> sensors). Meshes are copied next to it.
 Run: uv run --with mujoco python flatten_for_unity.py
 """
+
 import shutil
 import sys
 from pathlib import Path

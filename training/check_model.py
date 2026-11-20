@@ -1,4 +1,5 @@
 """Phase A.6: assert scene_porace.xml matches the contract. Run: uv run --with mujoco python check_model.py"""
+
 import json
 import sys
 from pathlib import Path
@@ -57,8 +58,17 @@ for k, body in enumerate(C.CUBE_BODIES):
     assert m.jnt_qposadr[m.body_jntadr[bid]] == C.NQ_ROBOT + 7 * k
 
 # Sensors exist by name.
-for s in [C.GYRO_SENSOR, C.LOCAL_LINVEL_SENSOR, C.UPVECTOR_SENSOR, C.GLOBAL_LINVEL_SENSOR, C.GLOBAL_ANGVEL_SENSOR,
-          C.ACCELEROMETER_SENSOR, *C.FEET_POS_SENSOR, *C.FEET_LINVEL_SENSOR, *C.FEET_CONTACT_SENSOR]:
+for s in [
+    C.GYRO_SENSOR,
+    C.LOCAL_LINVEL_SENSOR,
+    C.UPVECTOR_SENSOR,
+    C.GLOBAL_LINVEL_SENSOR,
+    C.GLOBAL_ANGVEL_SENSOR,
+    C.ACCELEROMETER_SENSOR,
+    *C.FEET_POS_SENSOR,
+    *C.FEET_LINVEL_SENSOR,
+    *C.FEET_CONTACT_SENSOR,
+]:
     assert mujoco.mj_name2id(m, mujoco.mjtObj.mjOBJ_SENSOR, s) >= 0, s
 
 # No robot self-penetration at home; feet are the only robot geoms touching the floor.
@@ -86,13 +96,24 @@ for k in range(C.NUM_CUBES):
 assert np.abs(d.qvel).max() < 0.05, "scene not at rest after 2 s"
 
 summary = {
-    "timestep": m.opt.timestep, "nq": m.nq, "nv": m.nv, "nu": m.nu, "nbody": m.nbody, "ngeom": m.ngeom,
+    "timestep": m.opt.timestep,
+    "nq": m.nq,
+    "nv": m.nv,
+    "nu": m.nu,
+    "nbody": m.nbody,
+    "ngeom": m.ngeom,
     "robot_mass": robot_mass,
     "bodies": names(mujoco.mjtObj.mjOBJ_BODY, m.nbody),
     "joints": joint_names,
     "actuators": C.ACTUATOR_NAMES,
-    "sensors": [{"name": mujoco.mj_id2name(m, mujoco.mjtObj.mjOBJ_SENSOR, i), "adr": int(m.sensor_adr[i]),
-                 "dim": int(m.sensor_dim[i])} for i in range(m.nsensor)],
+    "sensors": [
+        {
+            "name": mujoco.mj_id2name(m, mujoco.mjtObj.mjOBJ_SENSOR, i),
+            "adr": int(m.sensor_adr[i]),
+            "dim": int(m.sensor_dim[i]),
+        }
+        for i in range(m.nsensor)
+    ],
     "home_qpos": m.key_qpos[0].tolist(),
     "settled_qpos_after_2s_hold": d.qpos.tolist(),
 }

@@ -9,6 +9,7 @@ Exit: 0 all finished, 1 not (unless --limit was given), 4 --contact-gate failed.
 --mjb steps the model Unreal ran (saved by the controller) instead of the track XML: then Unreal and Python step the
 same numbers, and the finish times should match exactly.
 """
+
 import argparse
 import json
 import sys
@@ -21,97 +22,141 @@ sys.path.insert(0, str(Path(__file__).parent))
 from go2.sim import brain  # noqa: E402
 from racelib.go2racer import Go2Racer  # noqa: E402
 from racelib.human import HumanRacer  # noqa: E402
-from racelib.stroller import StrollerRacer  # noqa: E402
 from racelib.model import apply_numbers, apply_option  # noqa: E402
 from racelib.race import Entry, Race  # noqa: E402
+from racelib.stroller import StrollerRacer  # noqa: E402
 from racelib.track import Track  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 
 
 def load(track_id, mjb):
-  """The track model with the fingerprints' exact numbers, as URacerController::BindRace makes it: the track's options
-  and world, then every racer's body (by prefix), then mj_setConst (racelib/model.py)."""
-  fp = json.loads((ROOT / "training" / "models" / "tracks" / f"{track_id}_fingerprint.json").read_text())
-  m = mujoco.MjModel.from_binary_path(str(mjb)) if mjb else mujoco.MjModel.from_xml_path(str(ROOT / fp["model"]))
-  apply_option(m, fp["option"])
-  missing = apply_numbers(m, fp["world"])
-  for r in fp["racers"]:
-    missing += apply_numbers(m, json.loads((ROOT / r["fingerprint"]).read_text())["model"], r["prefix"])
-  assert missing == 0, f"{missing} names of the fingerprints are not in the model"
-  d = mujoco.MjData(m)
-  mujoco.mj_setConst(m, d)
-  return m, d, fp
+    """The track model with the fingerprints' exact numbers, as URacerController::BindRace makes it: the track's options
+    and world, then every racer's body (by prefix), then mj_setConst (racelib/model.py)."""
+    fp = json.loads((ROOT / "training" / "models" / "tracks" / f"{track_id}_fingerprint.json").read_text())
+    m = mujoco.MjModel.from_binary_path(str(mjb)) if mjb else mujoco.MjModel.from_xml_path(str(ROOT / fp["model"]))
+    apply_option(m, fp["option"])
+    missing = apply_numbers(m, fp["world"])
+    for r in fp["racers"]:
+        missing += apply_numbers(m, json.loads((ROOT / r["fingerprint"]).read_text())["model"], r["prefix"])
+    assert missing == 0, f"{missing} names of the fingerprints are not in the model"
+    d = mujoco.MjData(m)
+    mujoco.mj_setConst(m, d)
+    return m, d, fp
 
 
 def main():
-  ap = argparse.ArgumentParser()
-  ap.add_argument("track")
-  ap.add_argument("--seed", type=int, default=1)
-  ap.add_argument("--laps", type=int, default=0)
-  ap.add_argument("--flip-at", type=float, default=-1.0)
-  ap.add_argument("--flip-count", type=int, default=1, help="racers knocked over at --flip-at: the leader, then the next")
-  ap.add_argument("--no-tactics", action="store_true", help="fixed lanes (Unity -noTactics)")
-  ap.add_argument("--handicap", action="store_true", help="head starts that equalise expected finish times")
-  ap.add_argument("--yellow-flag", action="store_true", help="the yellow flag (on in interactive races, off in tests)")
-  ap.add_argument("--audit", action="store_true", help="log the contact audit")
-  ap.add_argument("--contact-gate", action="store_true", help="the contact audit, and fail (exit 4) past its limits")
-  ap.add_argument("--intro", type=float, default=0.0, help="seconds of racer intro before the countdown")
-  ap.add_argument("--finish-window", type=float, default=0.0, help="call the race this long after the winner (0: off)")
-  ap.add_argument("--limit", type=float, default=None, help="call the race this long after the start (default 600 s)")
-  ap.add_argument("--racers", help="comma-separated racer names on the grid (default: every racer of the track model)")
-  ap.add_argument("--mjb", type=Path)
-  ap.add_argument("--log", type=Path, help="JSONL: every racer's distance and state at 10 Hz")
-  a = ap.parse_args()
+    ap = argparse.ArgumentParser()
+    ap.add_argument("track")
+    ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--laps", type=int, default=0)
+    ap.add_argument("--flip-at", type=float, default=-1.0)
+    ap.add_argument(
+        "--flip-count", type=int, default=1, help="racers knocked over at --flip-at: the leader, then the next"
+    )
+    ap.add_argument("--no-tactics", action="store_true", help="fixed lanes (Unity -noTactics)")
+    ap.add_argument("--handicap", action="store_true", help="head starts that equalise expected finish times")
+    ap.add_argument(
+        "--yellow-flag", action="store_true", help="the yellow flag (on in interactive races, off in tests)"
+    )
+    ap.add_argument("--audit", action="store_true", help="log the contact audit")
+    ap.add_argument("--contact-gate", action="store_true", help="the contact audit, and fail (exit 4) past its limits")
+    ap.add_argument("--intro", type=float, default=0.0, help="seconds of racer intro before the countdown")
+    ap.add_argument(
+        "--finish-window", type=float, default=0.0, help="call the race this long after the winner (0: off)"
+    )
+    ap.add_argument("--limit", type=float, default=None, help="call the race this long after the start (default 600 s)")
+    ap.add_argument(
+        "--racers", help="comma-separated racer names on the grid (default: every racer of the track model)"
+    )
+    ap.add_argument("--mjb", type=Path)
+    ap.add_argument("--log", type=Path, help="JSONL: every racer's distance and state at 10 Hz")
+    a = ap.parse_args()
 
-  m, d, fp = load(a.track, a.mjb)
-  mujoco.mj_resetData(m, d)   # as FRaceRules::Setup: reset, the draw (each racer reset onto its slot), one forward
-  want = [n.strip().lower() for n in a.racers.split(",")] if a.racers else None
-  entries, parked = [], []
-  for r in fp["racers"]:
-    card = json.loads((ROOT / "training" / "characters" / f"{r['card']}.json").read_text())
-    if card["kind"] == "stroller":
-      racer = StrollerRacer(m, d, r["prefix"], card, brain(r["brain"]))
-    elif card["kind"] == "human":
-      creature = json.loads((ROOT / card["fingerprint"]).read_text())
-      racer = HumanRacer(m, d, r["prefix"], card, creature, brain(r["brain"]))
-    else:
-      racer = Go2Racer(m, d, r["prefix"], brain(r["brain"]), brain(r["getupBrain"]), r["homeHeight"])
-    if want is not None and r["name"].lower() not in want:
-      parked.append(racer)
-      continue
-    entries.append(Entry(r["name"], racer, r["cruise"], r["maxYawRate"], r["usesUnstick"], card.get("holdsHeadingAtRest", False), card.get("impratio", 100.0),
-                         tuple(r["prefix"] + f for f in card.get("footGeoms", [])), card.get("pace", 1.0), card.get("width", 0.35)))
-  race = Race(Track.load(a.track), entries, a.seed, laps=a.laps, flip_at=a.flip_at, flip_count=a.flip_count, parked=parked,
-              tactics=not a.no_tactics, handicap=a.handicap, yellow_flag=a.yellow_flag, audit=a.audit or a.contact_gate,
-              intro_steps=round(a.intro / 0.004), finish_window_steps=round(a.finish_window / 0.004),
-              limit_steps=round((a.limit if a.limit is not None else 600.0) / 0.004))
-  mujoco.mj_forward(m, d)
-  log = a.log.open("w") if a.log else None
-  t0 = time.perf_counter()
-  while not race.over:
-    race.pre_step()
-    race.control()
-    mujoco.mj_step(m, d)
-    if log and race.step % 25 == 0:
-      log.write(json.dumps({"step": race.step, "phase": race.phase, "t": round(race.race_time(), 3),
-                            "yellow": race.yellow.out,
-                            "racers": [[e.name, round(e.distance, 3), e.state, e.racer.mode, round(e.lateral, 3), e.intent] for e in entries]}) + "\n")
-  print(f"[Race] {race.result_line()}")
-  for ev in race.events:
-    if ev[1] in ("pass", "yellow", "green"):
-      print(f"[Event] {(ev[0] - race.race_start) * 0.004:.2f}s {' '.join(ev[1:])}")
-  fails = []
-  if race.auditor:
-    print(f"[ContactAudit] {race.auditor.line()}")
-    fails = race.auditor.failures() if a.contact_gate else []
-    for f in fails:
-      print(f"[ContactGate] FAIL {f}")
-  print(f"[Perf] {race.step} physics steps in {time.perf_counter() - t0:.1f} s on the CPU")
-  if fails:
-    return 4
-  return 0 if race.finished == len(entries) or a.limit is not None else 1
+    m, d, fp = load(a.track, a.mjb)
+    mujoco.mj_resetData(m, d)  # as FRaceRules::Setup: reset, the draw (each racer reset onto its slot), one forward
+    want = [n.strip().lower() for n in a.racers.split(",")] if a.racers else None
+    entries, parked = [], []
+    for r in fp["racers"]:
+        card = json.loads((ROOT / "training" / "characters" / f"{r['card']}.json").read_text())
+        if card["kind"] == "stroller":
+            racer = StrollerRacer(m, d, r["prefix"], card, brain(r["brain"]))
+        elif card["kind"] == "human":
+            creature = json.loads((ROOT / card["fingerprint"]).read_text())
+            racer = HumanRacer(m, d, r["prefix"], card, creature, brain(r["brain"]))
+        else:
+            racer = Go2Racer(m, d, r["prefix"], brain(r["brain"]), brain(r["getupBrain"]), r["homeHeight"])
+        if want is not None and r["name"].lower() not in want:
+            parked.append(racer)
+            continue
+        entries.append(
+            Entry(
+                r["name"],
+                racer,
+                r["cruise"],
+                r["maxYawRate"],
+                r["usesUnstick"],
+                card.get("holdsHeadingAtRest", False),
+                card.get("impratio", 100.0),
+                tuple(r["prefix"] + f for f in card.get("footGeoms", [])),
+                card.get("pace", 1.0),
+                card.get("width", 0.35),
+            )
+        )
+    race = Race(
+        Track.load(a.track),
+        entries,
+        a.seed,
+        laps=a.laps,
+        flip_at=a.flip_at,
+        flip_count=a.flip_count,
+        parked=parked,
+        tactics=not a.no_tactics,
+        handicap=a.handicap,
+        yellow_flag=a.yellow_flag,
+        audit=a.audit or a.contact_gate,
+        intro_steps=round(a.intro / 0.004),
+        finish_window_steps=round(a.finish_window / 0.004),
+        limit_steps=round((a.limit if a.limit is not None else 600.0) / 0.004),
+    )
+    mujoco.mj_forward(m, d)
+    log = a.log.open("w") if a.log else None
+    t0 = time.perf_counter()
+    while not race.over:
+        race.pre_step()
+        race.control()
+        mujoco.mj_step(m, d)
+        if log and race.step % 25 == 0:
+            log.write(
+                json.dumps(
+                    {
+                        "step": race.step,
+                        "phase": race.phase,
+                        "t": round(race.race_time(), 3),
+                        "yellow": race.yellow.out,
+                        "racers": [
+                            [e.name, round(e.distance, 3), e.state, e.racer.mode, round(e.lateral, 3), e.intent]
+                            for e in entries
+                        ],
+                    }
+                )
+                + "\n"
+            )
+    print(f"[Race] {race.result_line()}")
+    for ev in race.events:
+        if ev[1] in ("pass", "yellow", "green"):
+            print(f"[Event] {(ev[0] - race.race_start) * 0.004:.2f}s {' '.join(ev[1:])}")
+    fails = []
+    if race.auditor:
+        print(f"[ContactAudit] {race.auditor.line()}")
+        fails = race.auditor.failures() if a.contact_gate else []
+        for f in fails:
+            print(f"[ContactGate] FAIL {f}")
+    print(f"[Perf] {race.step} physics steps in {time.perf_counter() - t0:.1f} s on the CPU")
+    if fails:
+        return 4
+    return 0 if race.finished == len(entries) or a.limit is not None else 1
 
 
 if __name__ == "__main__":
-  sys.exit(main())
+    sys.exit(main())

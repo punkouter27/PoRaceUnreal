@@ -3,6 +3,7 @@
 Order everywhere (qpos[7:], qvel[6:], ctrl, obs slices, action index): FL, FR, RL, RR x hip, thigh, calf.
 docs/joint_order.md is the human copy of the same table and must stay in sync.
 """
+
 from pathlib import Path
 
 ROOT_PATH = Path(__file__).resolve().parent.parent
@@ -49,7 +50,7 @@ DEFAULT_POSE = [0.0, 0.9, -1.8] * 4
 TOTAL_ROBOT_MASS = 6.921 + 4 * (0.678 + 1.152 + 0.241352)
 
 OBS_JOYSTICK = 48  # local_linvel 3, gyro 3, gravity 3, qpos-default 12, qvel 12, last_act 12, command 3
-OBS_GETUP = 42     # gyro 3, gravity 3, qpos-default 12, qvel 12, last_act 12
+OBS_GETUP = 42  # gyro 3, gravity 3, qpos-default 12, qvel 12, last_act 12
 
 # Command slew limit applied by every controller (eval, reference recorder, Unity Go2Controller): the commanded
 # (vx, vy, yaw rate) moves toward the requested value by at most this much per second. Without it the policy

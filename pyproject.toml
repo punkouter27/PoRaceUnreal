@@ -1,10 +1,28 @@
 [project]
 name = "poraceunreal"
 version = "0.1.0"
-requires-python = ">=3.10"
+# Unreal's and Blender's bundled Pythons are 3.11; the trainer (training/pyproject.toml) needs 3.12.
+requires-python = ">=3.11"
 
 [dependency-groups]
-dev = ["pytest>=8.0"]
+dev = ["pytest>=8.0", "ruff==0.17.6", "mujoco==4.0.0", "numpy", "onnxruntime"]
 
 [tool.pytest.ini_options]
 pythonpath = [".", "training"]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+extend-exclude = ["Plugins", "reference", "node_modules", "dist", ".venv*", "Intermediate", "Saved"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "B", "UP"]
+ignore = [
+    "E741",  # l / I / O are used as math names (lengths, inertia, origin) in the physics scripts; not a defect
+    "E731",  # small named lambdas are the trainers' idiom for reward terms and filters; not a defect
+]
+
+[tool.ruff.lint.per-file-ignores]
+# watch() is a callback run synchronously inside the same loop iteration, so late binding cannot bite
+"training/human_check.py" = ["B023"]

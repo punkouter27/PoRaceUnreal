@@ -9,6 +9,7 @@ Sources (all in the repo):
 Matt's and Grandma's raw TensorBoard logs stayed on the training PC (training/runs is not in the repo), so their progress
 is shown with their test scores, which is what decides whether a brain ships anyway.
 """
+
 import argparse
 import html
 import json
@@ -18,243 +19,483 @@ ROOT = Path(__file__).resolve().parent.parent
 
 # --- data that lives only in the training log (docs/rl_optimization_log.md) -----------------------------------------
 MATT_RUNS = [  # run, graduation score /100, note
-  ("m14", 49, "first run through the child tier"), ("m15", 51, "plateau"), ("m16", 83, "turning fixed"), ("m17", 83, "plateau"),
-  ("m18", 97, "first pass, but wobbly standing"), ("m19", 92, "steady standing, limp on the limit"), ("m20", 98, "SHIPPED: passes every test"),
-  ("m21", 96, "same level"), ("m22", 99, "jog training: jog still falls"), ("m23", 89, "jog: worse"), ("m25", 95, "new stride clock: still no jog"),
+    ("m14", 49, "first run through the child tier"),
+    ("m15", 51, "plateau"),
+    ("m16", 83, "turning fixed"),
+    ("m17", 83, "plateau"),
+    ("m18", 97, "first pass, but wobbly standing"),
+    ("m19", 92, "steady standing, limp on the limit"),
+    ("m20", 98, "SHIPPED: passes every test"),
+    ("m21", 96, "same level"),
+    ("m22", 99, "jog training: jog still falls"),
+    ("m23", 89, "jog: worse"),
+    ("m25", 95, "new stride clock: still no jog"),
 ]
-STEEPLE = [("s2", 82.0), ("s4", 86.0), ("s5", 88.3), ("s6", 91.0), ("s7", 92.3)]   # hurdle course pass rate %, best checkpoint
-SPRINT = [("r8", 0), ("r9", 0), ("r10", 0), ("r11", 2), ("r12", 8), ("r13", 10)]     # sprint test passes /10
+STEEPLE = [
+    ("s2", 82.0),
+    ("s4", 86.0),
+    ("s5", 88.3),
+    ("s6", 91.0),
+    ("s7", 92.3),
+]  # hurdle course pass rate %, best checkpoint
+SPRINT = [("r8", 0), ("r9", 0), ("r10", 0), ("r11", 2), ("r12", 8), ("r13", 10)]  # sprint test passes /10
 
 # skill matrix: (skill, plain description) x agent -> (state, short text). States: pass / partial / fail / none
 SKILLS = [
-  ("Stand steady", "holds still for 10 s"),
-  ("Shrug off a push", "a hard shove, standing and walking"),
-  ("Walk / run on command", "follows the race speed it is told"),
-  ("Turn on command", "steers round bends"),
-  ("Get up after a fall", "stands itself back up"),
-  ("Sprint / jog", "2.5 m/s and faster"),
-  ("Banked turns", "sloped curves"),
-  ("Hurdles", "steeplechase obstacles"),
-  ("Works in Unreal", "moves exactly as in training"),
+    ("Stand steady", "holds still for 10 s"),
+    ("Shrug off a push", "a hard shove, standing and walking"),
+    ("Walk / run on command", "follows the race speed it is told"),
+    ("Turn on command", "steers round bends"),
+    ("Get up after a fall", "stands itself back up"),
+    ("Sprint / jog", "2.5 m/s and faster"),
+    ("Banked turns", "sloped curves"),
+    ("Hurdles", "steeplechase obstacles"),
+    ("Works in Unreal", "moves exactly as in training"),
 ]
 AGENTS = [
-  {"name": "Blue", "kind": "robot dog (Go2)", "slot": 1, "level": "Expert", "tone": "good",
-   "line": "Six brains, every skill test passed, races identical in Unreal.",
-   "steps": "about 1 billion training steps across its brains",
-   "skills": [("pass", "10/10"), ("pass", "30/30"), ("pass", "10/10 at 1.5 m/s"), ("pass", "yes"), ("pass", "30/30"),
-              ("partial", "brain ready (2.36 m/s), not used in races yet"), ("pass", "30/30"), ("pass", "92 % of courses"), ("pass", "exact")]},
-  {"name": "Matt", "kind": "human", "slot": 2, "level": "Racer", "tone": "good",
-   "line": "Walks every race and passes the race test 98/100. Cannot jog, climb or get up.",
-   "steps": "about 1.5 billion steps over 25 runs",
-   "skills": [("pass", "10/10"), ("pass", "10/10"), ("partial", "98/100, but holds ~92 % of the asked speed"), ("pass", "10/10"),
-              ("none", "not trained: lies still, reset after 5 s"), ("fail", "0/10: falls"), ("none", "flat tracks only"), ("none", "flat tracks only"),
-              ("pass", "exact")]},
-  {"name": "Grandma", "kind": "human", "slot": 3, "level": "Trained, not in the game", "tone": "warning",
-   "line": "Passed her race test (94/100) but walks with a limp, and nobody has checked her in Unreal yet.",
-   "steps": "about 690 million steps over 14 runs",
-   "skills": [("pass", "10/10"), ("pass", "10/10"), ("partial", "94/100; limps (lopsided skeleton)"), ("none", "not tested"),
-              ("none", "not trained"), ("none", "not trained"), ("none", "flat only"), ("none", "flat only"), ("fail", "not checked yet")]},
-  {"name": "G1", "kind": "humanoid robot", "slot": 0, "level": "Not started", "tone": "critical",
-   "line": "Body built, no brain. Waiting on a decision about its collision shapes.",
-   "steps": "no training yet",
-   "skills": [("none", "-")] * 9},
+    {
+        "name": "Blue",
+        "kind": "robot dog (Go2)",
+        "slot": 1,
+        "level": "Expert",
+        "tone": "good",
+        "line": "Six brains, every skill test passed, races identical in Unreal.",
+        "steps": "about 1 billion training steps across its brains",
+        "skills": [
+            ("pass", "10/10"),
+            ("pass", "30/30"),
+            ("pass", "10/10 at 1.5 m/s"),
+            ("pass", "yes"),
+            ("pass", "30/30"),
+            ("partial", "brain ready (2.36 m/s), not used in races yet"),
+            ("pass", "30/30"),
+            ("pass", "92 % of courses"),
+            ("pass", "exact"),
+        ],
+    },
+    {
+        "name": "Matt",
+        "kind": "human",
+        "slot": 2,
+        "level": "Racer",
+        "tone": "good",
+        "line": "Walks every race and passes the race test 98/100. Cannot jog, climb or get up.",
+        "steps": "about 1.5 billion steps over 25 runs",
+        "skills": [
+            ("pass", "10/10"),
+            ("pass", "10/10"),
+            ("partial", "98/100, but holds ~92 % of the asked speed"),
+            ("pass", "10/10"),
+            ("none", "not trained: lies still, reset after 5 s"),
+            ("fail", "0/10: falls"),
+            ("none", "flat tracks only"),
+            ("none", "flat tracks only"),
+            ("pass", "exact"),
+        ],
+    },
+    {
+        "name": "Grandma",
+        "kind": "human",
+        "slot": 3,
+        "level": "Trained, not in the game",
+        "tone": "warning",
+        "line": "Passed her race test (94/100) but walks with a limp, and nobody has checked her in Unreal yet.",
+        "steps": "about 690 million steps over 14 runs",
+        "skills": [
+            ("pass", "10/10"),
+            ("pass", "10/10"),
+            ("partial", "94/100; limps (lopsided skeleton)"),
+            ("none", "not tested"),
+            ("none", "not trained"),
+            ("none", "not trained"),
+            ("none", "flat only"),
+            ("none", "flat only"),
+            ("fail", "not checked yet"),
+        ],
+    },
+    {
+        "name": "G1",
+        "kind": "humanoid robot",
+        "slot": 0,
+        "level": "Not started",
+        "tone": "critical",
+        "line": "Body built, no brain. Waiting on a decision about its collision shapes.",
+        "steps": "no training yet",
+        "skills": [("none", "-")] * 9,
+    },
 ]
 NEXT = [  # priority, job, what you get, GPU time, people time, confidence, why
-  (1, "Bring Grandma into the game", "A third racer on the menu; the yellow flag can finally happen", "none",
-   "half a day (MuJoCo 4 check, Unreal match, race tests)", "high",
-   "Her brain already passed. The risk is only that the limp looks odd or trips her in the race tests."),
-  (2, "Blue at Matt's physics setting", "Fairer mixed races: Blue is 9/10 instead of 10/10 on standing starts when Matt races", "1-2 h",
-   "half a day (re-run every Blue check)", "high",
-   "A short fine-tune from the shipped brain. Touches the most-checked racer, so all its gates re-run."),
-  (3, "Fix Grandma's limp", "She walks evenly (her scanned skeleton has one leg 1.6 cm shorter)", "1-3 h",
-   "a day (fix the skeleton, retrain, re-test)", "medium",
-   "Skeleton fix first; then fine-tune from g14. From scratch would be a full night."),
-  (4, "Teach Matt to jog", "Matt keeps up with Blue; sprint races", "3-5 h (2-4 runs)", "a day", "low-medium",
-   "Two tries failed for the same reason: no 'both feet off the ground' phase. Needs a new reward."),
-  (5, "Get-up for the humans", "Matt and Grandma stand back up instead of a 5 s reset", "a night (8 h+)", "1-2 days", "low",
-   "A new skill from scratch; the dog's get-up took one run, humans are much harder."),
-  (6, "Start G1", "A fourth racer", "1-2 nights", "2-3 days + a design decision", "low",
-   "Needs your call on its collision shapes first; then a from-scratch run like Grandma's (about 690 M steps)."),
+    (
+        1,
+        "Bring Grandma into the game",
+        "A third racer on the menu; the yellow flag can finally happen",
+        "none",
+        "half a day (MuJoCo 4 check, Unreal match, race tests)",
+        "high",
+        "Her brain already passed. The risk is only that the limp looks odd or trips her in the race tests.",
+    ),
+    (
+        2,
+        "Blue at Matt's physics setting",
+        "Fairer mixed races: Blue is 9/10 instead of 10/10 on standing starts when Matt races",
+        "1-2 h",
+        "half a day (re-run every Blue check)",
+        "high",
+        "A short fine-tune from the shipped brain. Touches the most-checked racer, so all its gates re-run.",
+    ),
+    (
+        3,
+        "Fix Grandma's limp",
+        "She walks evenly (her scanned skeleton has one leg 1.6 cm shorter)",
+        "1-3 h",
+        "a day (fix the skeleton, retrain, re-test)",
+        "medium",
+        "Skeleton fix first; then fine-tune from g14. From scratch would be a full night.",
+    ),
+    (
+        4,
+        "Teach Matt to jog",
+        "Matt keeps up with Blue; sprint races",
+        "3-5 h (2-4 runs)",
+        "a day",
+        "low-medium",
+        "Two tries failed for the same reason: no 'both feet off the ground' phase. Needs a new reward.",
+    ),
+    (
+        5,
+        "Get-up for the humans",
+        "Matt and Grandma stand back up instead of a 5 s reset",
+        "a night (8 h+)",
+        "1-2 days",
+        "low",
+        "A new skill from scratch; the dog's get-up took one run, humans are much harder.",
+    ),
+    (
+        6,
+        "Start G1",
+        "A fourth racer",
+        "1-2 nights",
+        "2-3 days + a design decision",
+        "low",
+        "Needs your call on its collision shapes first; then a from-scratch run like Grandma's (about 690 M steps).",
+    ),
 ]
 
 SLOT = {1: "--s1", 2: "--s2", 3: "--s3"}
-STATE_ICON = {"pass": ("✓", "--good", "Passed"), "partial": ("◐", "--warn", "Partly"), "fail": ("✗", "--bad", "Failed"),
-              "none": ("–", "--muted", "Not trained")}
+STATE_ICON = {
+    "pass": ("✓", "--good", "Passed"),
+    "partial": ("◐", "--warn", "Partly"),
+    "fail": ("✗", "--bad", "Failed"),
+    "none": ("–", "--muted", "Not trained"),
+}
 
 
 def esc(s):
-  return html.escape(str(s))
+    return html.escape(str(s))
 
 
 # --- small SVG chart kit ---------------------------------------------------------------------------------------------
 class Chart:
-  """A line/dot chart in one SVG: one x and one y axis, recessive grid, annotated points, hover tooltips."""
+    """A line/dot chart in one SVG: one x and one y axis, recessive grid, annotated points, hover tooltips."""
 
-  def __init__(self, w, h, x0, x1, y0, y1, xlab, ylab, xfmt=lambda v: f"{v:g}", yfmt=lambda v: f"{v:g}", xticks=None, yticks=None):
-    self.w, self.h = w, h
-    self.l, self.r, self.t, self.b = 60, 72, 18, 46   # right margin: room for the direct label
-    self.x0, self.x1, self.y0, self.y1 = x0, x1, y0, y1
-    self.parts = []
-    self.xlab, self.ylab, self.xfmt, self.yfmt = xlab, ylab, xfmt, yfmt
-    self.xticks, self.yticks = xticks, yticks
+    def __init__(
+        self,
+        w,
+        h,
+        x0,
+        x1,
+        y0,
+        y1,
+        xlab,
+        ylab,
+        xfmt=lambda v: f"{v:g}",
+        yfmt=lambda v: f"{v:g}",
+        xticks=None,
+        yticks=None,
+    ):
+        self.w, self.h = w, h
+        self.l, self.r, self.t, self.b = 60, 72, 18, 46  # right margin: room for the direct label
+        self.x0, self.x1, self.y0, self.y1 = x0, x1, y0, y1
+        self.parts = []
+        self.xlab, self.ylab, self.xfmt, self.yfmt = xlab, ylab, xfmt, yfmt
+        self.xticks, self.yticks = xticks, yticks
 
-  def X(self, v):
-    return self.l + (v - self.x0) / (self.x1 - self.x0) * (self.w - self.l - self.r)
+    def X(self, v):
+        return self.l + (v - self.x0) / (self.x1 - self.x0) * (self.w - self.l - self.r)
 
-  def Y(self, v):
-    return self.h - self.b - (v - self.y0) / (self.y1 - self.y0) * (self.h - self.t - self.b)
+    def Y(self, v):
+        return self.h - self.b - (v - self.y0) / (self.y1 - self.y0) * (self.h - self.t - self.b)
 
-  def axes(self):
-    p = []
-    for v in self.yticks:
-      y = self.Y(v)
-      p.append(f'<line class="grid" x1="{self.l}" x2="{self.w - self.r}" y1="{y:.1f}" y2="{y:.1f}"/>')
-      p.append(f'<text class="tick" x="{self.l - 8}" y="{y + 4:.1f}" text-anchor="end">{esc(self.yfmt(v))}</text>')
-    for v in self.xticks:
-      x = self.X(v)
-      p.append(f'<text class="tick" x="{x:.1f}" y="{self.h - self.b + 18}" text-anchor="middle">{esc(self.xfmt(v))}</text>')
-    p.append(f'<line class="axis" x1="{self.l}" x2="{self.w - self.r}" y1="{self.Y(self.y0):.1f}" y2="{self.Y(self.y0):.1f}"/>')
-    p.append(f'<text class="axlab" x="{(self.l + self.w - self.r) / 2:.1f}" y="{self.h - 6}" text-anchor="middle">{esc(self.xlab)}</text>')
-    p.append(f'<text class="axlab" x="14" y="{(self.t + self.h - self.b) / 2:.1f}" text-anchor="middle" transform="rotate(-90 14 {(self.t + self.h - self.b) / 2:.1f})">{esc(self.ylab)}</text>')
-    return p
+    def axes(self):
+        p = []
+        for v in self.yticks:
+            y = self.Y(v)
+            p.append(f'<line class="grid" x1="{self.l}" x2="{self.w - self.r}" y1="{y:.1f}" y2="{y:.1f}"/>')
+            p.append(
+                f'<text class="tick" x="{self.l - 8}" y="{y + 4:.1f}" text-anchor="end">{esc(self.yfmt(v))}</text>'
+            )
+        for v in self.xticks:
+            x = self.X(v)
+            p.append(
+                f'<text class="tick" x="{x:.1f}" y="{self.h - self.b + 18}" text-anchor="middle">{esc(self.xfmt(v))}</text>'
+            )
+        p.append(
+            f'<line class="axis" x1="{self.l}" x2="{self.w - self.r}" y1="{self.Y(self.y0):.1f}" y2="{self.Y(self.y0):.1f}"/>'
+        )
+        p.append(
+            f'<text class="axlab" x="{(self.l + self.w - self.r) / 2:.1f}" y="{self.h - 6}" text-anchor="middle">{esc(self.xlab)}</text>'
+        )
+        p.append(
+            f'<text class="axlab" x="14" y="{(self.t + self.h - self.b) / 2:.1f}" text-anchor="middle" transform="rotate(-90 14 {(self.t + self.h - self.b) / 2:.1f})">{esc(self.ylab)}</text>'
+        )
+        return p
 
-  def line(self, pts, var, label=None, tip=lambda x, y: ""):
-    d = " ".join(f"{'M' if i == 0 else 'L'}{self.X(x):.1f},{self.Y(y):.1f}" for i, (x, y) in enumerate(pts))
-    self.parts.append(f'<path d="{d}" fill="none" stroke="var({var})" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>')
-    for x, y in pts:
-      self.dot(x, y, var, tip(x, y), r=4)
-    if label:
-      x, y = pts[-1]
-      self.parts.append(f'<text class="dlabel" x="{self.X(x) + 8:.1f}" y="{self.Y(y) + 4:.1f}">{esc(label)}</text>')
+    def line(self, pts, var, label=None, tip=lambda x, y: ""):
+        d = " ".join(f"{'M' if i == 0 else 'L'}{self.X(x):.1f},{self.Y(y):.1f}" for i, (x, y) in enumerate(pts))
+        self.parts.append(
+            f'<path d="{d}" fill="none" stroke="var({var})" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'
+        )
+        for x, y in pts:
+            self.dot(x, y, var, tip(x, y), r=4)
+        if label:
+            x, y = pts[-1]
+            self.parts.append(
+                f'<text class="dlabel" x="{self.X(x) + 8:.1f}" y="{self.Y(y) + 4:.1f}">{esc(label)}</text>'
+            )
 
-  def dot(self, x, y, var, tip, r=4.5):
-    self.parts.append(f'<circle cx="{self.X(x):.1f}" cy="{self.Y(y):.1f}" r="{r}" fill="var({var})" stroke="var(--surface)" stroke-width="2"/>'
-                      f'<circle class="hit" cx="{self.X(x):.1f}" cy="{self.Y(y):.1f}" r="12" data-tip="{esc(tip)}"/>')
+    def dot(self, x, y, var, tip, r=4.5):
+        self.parts.append(
+            f'<circle cx="{self.X(x):.1f}" cy="{self.Y(y):.1f}" r="{r}" fill="var({var})" stroke="var(--surface)" stroke-width="2"/>'
+            f'<circle class="hit" cx="{self.X(x):.1f}" cy="{self.Y(y):.1f}" r="12" data-tip="{esc(tip)}"/>'
+        )
 
-  def hline(self, v, text):
-    y = self.Y(v)
-    self.parts.append(f'<line class="goal" x1="{self.l}" x2="{self.w - self.r}" y1="{y:.1f}" y2="{y:.1f}"/>'
-                      f'<text class="goaltext" x="{self.l + 6}" y="{y - 6:.1f}" text-anchor="start">{esc(text)}</text>')
+    def hline(self, v, text):
+        y = self.Y(v)
+        self.parts.append(
+            f'<line class="goal" x1="{self.l}" x2="{self.w - self.r}" y1="{y:.1f}" y2="{y:.1f}"/>'
+            f'<text class="goaltext" x="{self.l + 6}" y="{y - 6:.1f}" text-anchor="start">{esc(text)}</text>'
+        )
 
-  def note(self, x, y, text, dx=0, dy=-34, anchor="middle"):
-    """An annotation: a leader line from the point to a short label."""
-    px, py = self.X(x), self.Y(y)
-    tx, ty = px + dx, py + dy
-    self.parts.append(f'<line class="leader" x1="{px:.1f}" y1="{py:.1f}" x2="{tx:.1f}" y2="{ty + 4:.1f}"/>'
-                      f'<text class="note" x="{tx:.1f}" y="{ty:.1f}" text-anchor="{anchor}">{esc(text)}</text>')
+    def note(self, x, y, text, dx=0, dy=-34, anchor="middle"):
+        """An annotation: a leader line from the point to a short label."""
+        px, py = self.X(x), self.Y(y)
+        tx, ty = px + dx, py + dy
+        self.parts.append(
+            f'<line class="leader" x1="{px:.1f}" y1="{py:.1f}" x2="{tx:.1f}" y2="{ty + 4:.1f}"/>'
+            f'<text class="note" x="{tx:.1f}" y="{ty:.1f}" text-anchor="{anchor}">{esc(text)}</text>'
+        )
 
-  def svg(self, title):
-    body = "".join(self.axes() + self.parts)
-    return f'<svg viewBox="0 0 {self.w} {self.h}" role="img" aria-label="{esc(title)}"><title>{esc(title)}</title>{body}</svg>'
+    def svg(self, title):
+        body = "".join(self.axes() + self.parts)
+        return f'<svg viewBox="0 0 {self.w} {self.h}" role="img" aria-label="{esc(title)}"><title>{esc(title)}</title>{body}</svg>'
 
 
 def go2_curves():
-  tb = json.loads((ROOT / "docs/report/tb_final.json").read_text())
-  out = {}
-  for tag in ("eval/episode_reward", "eval/avg_episode_length", "eval/episode_reward/tracking_lin_vel"):
-    r1 = [(s / 1e6, v) for s, v in tb["r1"][tag][:2]]                      # 0 -> 23 M, then resumed as r1b
-    r1b = [(r1[-1][0] + s / 1e6, v) for s, v in tb["r1b"][tag]]
-    out[tag] = r1 + r1b[1:]
-  return out
+    tb = json.loads((ROOT / "docs/report/tb_final.json").read_text())
+    out = {}
+    for tag in ("eval/episode_reward", "eval/avg_episode_length", "eval/episode_reward/tracking_lin_vel"):
+        r1 = [(s / 1e6, v) for s, v in tb["r1"][tag][:2]]  # 0 -> 23 M, then resumed as r1b
+        r1b = [(r1[-1][0] + s / 1e6, v) for s, v in tb["r1b"][tag]]
+        out[tag] = r1 + r1b[1:]
+    return out
 
 
 def table(headers, rows):
-  h = "".join(f"<th>{esc(x)}</th>" for x in headers)
-  b = "".join("<tr>" + "".join(f"<td>{c}</td>" for c in r) + "</tr>" for r in rows)
-  return f'<div class="scroll"><table><thead><tr>{h}</tr></thead><tbody>{b}</tbody></table></div>'
+    h = "".join(f"<th>{esc(x)}</th>" for x in headers)
+    b = "".join("<tr>" + "".join(f"<td>{c}</td>" for c in r) + "</tr>" for r in rows)
+    return f'<div class="scroll"><table><thead><tr>{h}</tr></thead><tbody>{b}</tbody></table></div>'
 
 
 def main():
-  ap = argparse.ArgumentParser()
-  ap.add_argument("--out", type=Path, default=ROOT / "docs/report/training_status_20261110.html")
-  a = ap.parse_args()
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--out", type=Path, default=ROOT / "docs/report/training_status_20261110.html")
+    a = ap.parse_args()
 
-  # 1. the three TensorBoard metrics, Blue's flat-ground brain (the one every race uses)
-  c = go2_curves()
-  rew, ln, trk = c["eval/episode_reward"], c["eval/avg_episode_length"], c["eval/episode_reward/tracking_lin_vel"]
-  xt = [0, 50, 100, 150, 200]
-  ch1 = Chart(520, 280, 0, 230, 0, 30, "training so far (millions of practice steps)", "score", xticks=xt, yticks=[0, 10, 20, 30])
-  ch1.line(rew, "--s1", "Blue", lambda x, y: f"{x:.0f} M steps: score {y:.1f}")
-  ch1.note(rew[1][0], rew[1][1], "learned to stand and walk", dx=30, dy=60, anchor="start")
-  ch1.note(rew[-1][0], rew[-1][1], "levelled off: done", dx=-20, dy=60, anchor="end")
-  ch2 = Chart(520, 280, 0, 230, 0, 1000, "training so far (millions of practice steps)", "seconds without falling", xticks=xt,
-              yticks=[0, 250, 500, 750, 1000], yfmt=lambda v: f"{v / 50:.0f} s")
-  ch2.hline(1000, "the whole 20 s test")
-  ch2.line(ln, "--s1", "Blue", lambda x, y: f"{x:.0f} M steps: stays up {y / 50:.1f} of 20 s")
-  ch2.note(0, ln[0][1], "falls after 7 s", dx=40, dy=30, anchor="start")
-  ymax = max(v for _, v in trk) * 1.1
-  ch3 = Chart(520, 280, 0, 230, 0, ymax, "training so far (millions of practice steps)", "speed-following points",
-              xticks=xt, yticks=[0, 200, 400, 600, 800], yfmt=lambda v: f"{v:.0f}")
-  ch3.line(trk, "--s1", "Blue", lambda x, y: f"{x:.0f} M steps: {y:.0f} points")
-  ch3.note(trk[1][0], trk[1][1], "walks, but not at the asked speed", dx=30, dy=40, anchor="start")
-  ch3.note(trk[-1][0], trk[-1][1], "matches the asked speed", dx=-20, dy=60, anchor="end")
+    # 1. the three TensorBoard metrics, Blue's flat-ground brain (the one every race uses)
+    c = go2_curves()
+    rew, ln, trk = c["eval/episode_reward"], c["eval/avg_episode_length"], c["eval/episode_reward/tracking_lin_vel"]
+    xt = [0, 50, 100, 150, 200]
+    ch1 = Chart(
+        520,
+        280,
+        0,
+        230,
+        0,
+        30,
+        "training so far (millions of practice steps)",
+        "score",
+        xticks=xt,
+        yticks=[0, 10, 20, 30],
+    )
+    ch1.line(rew, "--s1", "Blue", lambda x, y: f"{x:.0f} M steps: score {y:.1f}")
+    ch1.note(rew[1][0], rew[1][1], "learned to stand and walk", dx=30, dy=60, anchor="start")
+    ch1.note(rew[-1][0], rew[-1][1], "levelled off: done", dx=-20, dy=60, anchor="end")
+    ch2 = Chart(
+        520,
+        280,
+        0,
+        230,
+        0,
+        1000,
+        "training so far (millions of practice steps)",
+        "seconds without falling",
+        xticks=xt,
+        yticks=[0, 250, 500, 750, 1000],
+        yfmt=lambda v: f"{v / 50:.0f} s",
+    )
+    ch2.hline(1000, "the whole 20 s test")
+    ch2.line(ln, "--s1", "Blue", lambda x, y: f"{x:.0f} M steps: stays up {y / 50:.1f} of 20 s")
+    ch2.note(0, ln[0][1], "falls after 7 s", dx=40, dy=30, anchor="start")
+    ymax = max(v for _, v in trk) * 1.1
+    ch3 = Chart(
+        520,
+        280,
+        0,
+        230,
+        0,
+        ymax,
+        "training so far (millions of practice steps)",
+        "speed-following points",
+        xticks=xt,
+        yticks=[0, 200, 400, 600, 800],
+        yfmt=lambda v: f"{v:.0f}",
+    )
+    ch3.line(trk, "--s1", "Blue", lambda x, y: f"{x:.0f} M steps: {y:.0f} points")
+    ch3.note(trk[1][0], trk[1][1], "walks, but not at the asked speed", dx=30, dy=40, anchor="start")
+    ch3.note(trk[-1][0], trk[-1][1], "matches the asked speed", dx=-20, dy=60, anchor="end")
 
-  # 2. the humans: the race test score, run by run
-  ch4 = Chart(520, 300, -0.5, len(MATT_RUNS) - 0.5, 0, 100, "Matt's training runs, in order", "race test score (of 100)",
-              xticks=list(range(len(MATT_RUNS))), yticks=[0, 25, 50, 75, 100], xfmt=lambda v: MATT_RUNS[int(v)][0])
-  ch4.hline(90, "pass mark 90")
-  ch4.line([(i, s) for i, (_, s, _) in enumerate(MATT_RUNS)], "--s2", "Matt", lambda x, y: f"{MATT_RUNS[int(x)][0]}: {y:.0f}/100, {MATT_RUNS[int(x)][2]}")
-  i20 = [r[0] for r in MATT_RUNS].index("m20")
-  ch4.note(i20, 98, "m20 shipped (98)", dx=0, dy=110)
-  ch4.note(2, 83, "turning fixed", dx=10, dy=60, anchor="start")
-  ch4.note(9, 89, "jog tries: no jog", dx=0, dy=60, anchor="middle")
+    # 2. the humans: the race test score, run by run
+    ch4 = Chart(
+        520,
+        300,
+        -0.5,
+        len(MATT_RUNS) - 0.5,
+        0,
+        100,
+        "Matt's training runs, in order",
+        "race test score (of 100)",
+        xticks=list(range(len(MATT_RUNS))),
+        yticks=[0, 25, 50, 75, 100],
+        xfmt=lambda v: MATT_RUNS[int(v)][0],
+    )
+    ch4.hline(90, "pass mark 90")
+    ch4.line(
+        [(i, s) for i, (_, s, _) in enumerate(MATT_RUNS)],
+        "--s2",
+        "Matt",
+        lambda x, y: f"{MATT_RUNS[int(x)][0]}: {y:.0f}/100, {MATT_RUNS[int(x)][2]}",
+    )
+    i20 = [r[0] for r in MATT_RUNS].index("m20")
+    ch4.note(i20, 98, "m20 shipped (98)", dx=0, dy=110)
+    ch4.note(2, 83, "turning fixed", dx=10, dy=60, anchor="start")
+    ch4.note(9, 89, "jog tries: no jog", dx=0, dy=60, anchor="middle")
 
-  pts = json.loads((ROOT / "docs/20261109/grandma_ladder_points.json").read_text())
-  lin = pts["lineage"]
-  gp = sorted([(lin[p["run"]] + p["step"], p["grad"], p["run"]) for p in pts["points"] if p.get("grad") is not None], key=lambda t: t[0])
-  ch5 = Chart(520, 300, 200, 660, 0, 100, "Grandma's training so far (millions of practice steps)", "race test score (of 100)",
-              xticks=[200, 300, 400, 500, 600], yticks=[0, 25, 50, 75, 100])
-  ch5.hline(90, "pass mark 90")
-  ch5.line([(x, y) for x, y, _ in gp], "--s3", "Grandma", lambda x, y: f"{x:.0f} M steps: {y:.0f}/100")
-  ch5.note(gp[0][0], gp[0][1], "stood, but would not walk", dx=10, dy=-40, anchor="start")
-  ch5.note(gp[-1][0], gp[-1][1], "g14 passed (94)", dx=-30, dy=90, anchor="end")
-  ch5.note(387.4, 2, "first passes, falls standing", dx=-10, dy=-70, anchor="end")
+    pts = json.loads((ROOT / "docs/20261109/grandma_ladder_points.json").read_text())
+    lin = pts["lineage"]
+    gp = sorted(
+        [(lin[p["run"]] + p["step"], p["grad"], p["run"]) for p in pts["points"] if p.get("grad") is not None],
+        key=lambda t: t[0],
+    )
+    ch5 = Chart(
+        520,
+        300,
+        200,
+        660,
+        0,
+        100,
+        "Grandma's training so far (millions of practice steps)",
+        "race test score (of 100)",
+        xticks=[200, 300, 400, 500, 600],
+        yticks=[0, 25, 50, 75, 100],
+    )
+    ch5.hline(90, "pass mark 90")
+    ch5.line([(x, y) for x, y, _ in gp], "--s3", "Grandma", lambda x, y: f"{x:.0f} M steps: {y:.0f}/100")
+    ch5.note(gp[0][0], gp[0][1], "stood, but would not walk", dx=10, dy=-40, anchor="start")
+    ch5.note(gp[-1][0], gp[-1][1], "g14 passed (94)", dx=-30, dy=90, anchor="end")
+    ch5.note(387.4, 2, "first passes, falls standing", dx=-10, dy=-70, anchor="end")
 
-  # 3. Blue's specialist skills
-  ch6 = Chart(520, 280, -0.5, len(STEEPLE) - 0.5, 70, 100, "hurdle-course runs", "courses finished (%)",
-              xticks=list(range(len(STEEPLE))), yticks=[70, 80, 90, 100], xfmt=lambda v: STEEPLE[int(v)][0])
-  ch6.hline(90, "pass 90 %")
-  ch6.line([(i, v) for i, (_, v) in enumerate(STEEPLE)], "--s1", None, lambda x, y: f"{STEEPLE[int(x)][0]}: {y:.0f} %")
-  ch6.note(len(STEEPLE) - 1, STEEPLE[-1][1], "s7 shipped", dx=-30, dy=50, anchor="end")
-  ch7 = Chart(520, 280, -0.5, len(SPRINT) - 0.5, 0, 10, "sprint runs", "sprint tests passed (of 10)",
-              xticks=list(range(len(SPRINT))), yticks=[0, 5, 10], xfmt=lambda v: SPRINT[int(v)][0])
-  ch7.hline(9, "pass 9")
-  ch7.line([(i, v) for i, (_, v) in enumerate(SPRINT)], "--s1", None, lambda x, y: f"{SPRINT[int(x)][0]}: {y:.0f}/10")
-  ch7.note(3, 2, "lighter effort penalty", dx=-10, dy=-60, anchor="end")
+    # 3. Blue's specialist skills
+    ch6 = Chart(
+        520,
+        280,
+        -0.5,
+        len(STEEPLE) - 0.5,
+        70,
+        100,
+        "hurdle-course runs",
+        "courses finished (%)",
+        xticks=list(range(len(STEEPLE))),
+        yticks=[70, 80, 90, 100],
+        xfmt=lambda v: STEEPLE[int(v)][0],
+    )
+    ch6.hline(90, "pass 90 %")
+    ch6.line(
+        [(i, v) for i, (_, v) in enumerate(STEEPLE)], "--s1", None, lambda x, y: f"{STEEPLE[int(x)][0]}: {y:.0f} %"
+    )
+    ch6.note(len(STEEPLE) - 1, STEEPLE[-1][1], "s7 shipped", dx=-30, dy=50, anchor="end")
+    ch7 = Chart(
+        520,
+        280,
+        -0.5,
+        len(SPRINT) - 0.5,
+        0,
+        10,
+        "sprint runs",
+        "sprint tests passed (of 10)",
+        xticks=list(range(len(SPRINT))),
+        yticks=[0, 5, 10],
+        xfmt=lambda v: SPRINT[int(v)][0],
+    )
+    ch7.hline(9, "pass 9")
+    ch7.line([(i, v) for i, (_, v) in enumerate(SPRINT)], "--s1", None, lambda x, y: f"{SPRINT[int(x)][0]}: {y:.0f}/10")
+    ch7.note(3, 2, "lighter effort penalty", dx=-10, dy=-60, anchor="end")
 
-  # skill matrix
-  head = "".join(f'<th><span class="sw" style="background:var({SLOT.get(ag["slot"], "--muted")})"></span>{esc(ag["name"])}</th>' for ag in AGENTS)
-  rows = []
-  for k, (skill, desc) in enumerate(SKILLS):
-    cells = []
+    # skill matrix
+    head = "".join(
+        f'<th><span class="sw" style="background:var({SLOT.get(ag["slot"], "--muted")})"></span>{esc(ag["name"])}</th>'
+        for ag in AGENTS
+    )
+    rows = []
+    for k, (skill, desc) in enumerate(SKILLS):
+        cells = []
+        for ag in AGENTS:
+            st, txt = ag["skills"][k]
+            icon, var, word = STATE_ICON[st]
+            cells.append(
+                f'<td class="cell"><span class="st" style="color:var({var})" aria-label="{word}">{icon}</span> <b>{word}</b><br><span class="sub">{esc(txt)}</span></td>'
+            )
+        rows.append(
+            f'<tr><th class="rowh">{esc(skill)}<br><span class="sub">{esc(desc)}</span></th>{"".join(cells)}</tr>'
+        )
+    matrix = f'<div class="scroll"><table class="matrix"><thead><tr><th></th>{head}</tr></thead><tbody>{"".join(rows)}</tbody></table></div>'
+
+    def level_bar(ag):
+        passed = sum(1.0 if s == "pass" else 0.5 if s == "partial" else 0.0 for s, _ in ag["skills"])
+        pct = passed / len(SKILLS) * 100
+        var = SLOT.get(ag["slot"], "--muted")
+        return pct, (
+            f'<div class="bar" role="img" aria-label="{pct:.0f} % of skills"><div style="width:{pct:.0f}%;background:var({var})"></div></div>'
+            f'<div class="sub">{passed:g} of {len(SKILLS)} skills ({pct:.0f} %)</div>'
+        )
+
+    tone_icon = {"good": "✓", "warning": "!", "critical": "✗"}
+    cards = []
     for ag in AGENTS:
-      st, txt = ag["skills"][k]
-      icon, var, word = STATE_ICON[st]
-      cells.append(f'<td class="cell"><span class="st" style="color:var({var})" aria-label="{word}">{icon}</span> <b>{word}</b><br><span class="sub">{esc(txt)}</span></td>')
-    rows.append(f'<tr><th class="rowh">{esc(skill)}<br><span class="sub">{esc(desc)}</span></th>{"".join(cells)}</tr>')
-  matrix = f'<div class="scroll"><table class="matrix"><thead><tr><th></th>{head}</tr></thead><tbody>{"".join(rows)}</tbody></table></div>'
+        _, bar = level_bar(ag)
+        tv = {"good": "--good", "warning": "--warn", "critical": "--bad"}[ag["tone"]]
+        cards.append(
+            f'<div class="card"><div class="cardhead"><span class="sw big" style="background:var({SLOT.get(ag["slot"], "--muted")})"></span>'
+            f'<div><div class="name">{esc(ag["name"])}</div><div class="sub">{esc(ag["kind"])}</div></div></div>'
+            f'<div class="level"><span class="badge" style="border-color:var({tv})"><span style="color:var({tv})">{tone_icon[ag["tone"]]}</span> {esc(ag["level"])}</span></div>'
+            f'{bar}<p>{esc(ag["line"])}</p><div class="sub">{esc(ag["steps"])}</div></div>'
+        )
 
-  def level_bar(ag):
-    passed = sum(1.0 if s == "pass" else 0.5 if s == "partial" else 0.0 for s, _ in ag["skills"])
-    pct = passed / len(SKILLS) * 100
-    var = SLOT.get(ag["slot"], "--muted")
-    return pct, (f'<div class="bar" role="img" aria-label="{pct:.0f} % of skills"><div style="width:{pct:.0f}%;background:var({var})"></div></div>'
-                 f'<div class="sub">{passed:g} of {len(SKILLS)} skills ({pct:.0f} %)</div>')
+    nxt = table(
+        ["#", "Train next", "What you get", "GPU time", "Your/my time", "Odds it works", "Notes"],
+        [(str(p), f"<b>{esc(j)}</b>", esc(w), esc(g), esc(t), esc(c), esc(n)) for p, j, w, g, t, c, n in NEXT],
+    )
 
-  tone_icon = {"good": "✓", "warning": "!", "critical": "✗"}
-  cards = []
-  for ag in AGENTS:
-    _, bar = level_bar(ag)
-    tv = {"good": "--good", "warning": "--warn", "critical": "--bad"}[ag["tone"]]
-    cards.append(f'<div class="card"><div class="cardhead"><span class="sw big" style="background:var({SLOT.get(ag["slot"], "--muted")})"></span>'
-                 f'<div><div class="name">{esc(ag["name"])}</div><div class="sub">{esc(ag["kind"])}</div></div></div>'
-                 f'<div class="level"><span class="badge" style="border-color:var({tv})"><span style="color:var({tv})">{tone_icon[ag["tone"]]}</span> {esc(ag["level"])}</span></div>'
-                 f'{bar}<p>{esc(ag["line"])}</p><div class="sub">{esc(ag["steps"])}</div></div>')
-
-  nxt = table(["#", "Train next", "What you get", "GPU time", "Your/my time", "Odds it works", "Notes"],
-              [(str(p), f"<b>{esc(j)}</b>", esc(w), esc(g), esc(t), esc(c), esc(n)) for p, j, w, g, t, c, n in NEXT])
-
-  page = f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+    page = f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Agent Training Status</title>
 <style>
 :root {{ color-scheme: light; --surface:#fcfcfb; --page:#f9f9f7; --ink:#0b0b0b; --ink2:#52514e; --muted:#898781; --grid:#e1e0d9; --axis:#c3c2b7;
@@ -364,9 +605,9 @@ document.querySelectorAll('.hit').forEach(h => {{
 }});
 </script>
 </body></html>"""
-  a.out.write_text(page, encoding="utf-8")
-  print(f"wrote {a.out}")
+    a.out.write_text(page, encoding="utf-8")
+    print(f"wrote {a.out}")
 
 
 if __name__ == "__main__":
-  main()
+    main()

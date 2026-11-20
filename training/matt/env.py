@@ -8,181 +8,231 @@ gait clock are the stock ones. Differences from the G1 env, all for racing with 
   - full self-collision (contacts per world set in train.py)
   - contact-force threshold at 1.53 x body weight, as for the G1, and a small alive bonus (see default_config)
   - race tracking (m7): wide-sigma velocity terms and a heading-drift cost (see default_config / MattJoystick)."""
+
 from pathlib import Path
-from typing import Any, Dict, Optional, Union
+from typing import Any
 
 import jax
 import jax.numpy as jp
+import reward_config
 from ml_collections import config_dict
 from mujoco_playground._src.locomotion.g1 import base as g1_base
 from mujoco_playground._src.locomotion.g1 import joystick as stock
 
 XML = Path(__file__).resolve().parent / "assets" / "matt_porace.xml"
-CONTACTS_PER_ENV = 24   # two sole boxes (up to 4 each) plus self-contacts while stumbling or lying down
+CONTACTS_PER_ENV = 24  # two sole boxes (up to 4 each) plus self-contacts while stumbling or lying down
 
 
 def default_config() -> config_dict.ConfigDict:
-  cfg = stock.default_config()
-  cfg.sim_dt = 0.004
-  cfg.ctrl_dt = 0.02
-  cfg.lin_vel_x = [-0.3, 1.8]
-  cfg.lin_vel_y = [-0.4, 0.4]
-  cfg.ang_vel_yaw = [-1.0, 1.0]
-  cfg.reward_config.max_foot_height = 0.12
-  # The stock contact-force penalty counts foot force above 500 N: 1.53 x the G1's 327 N weight. Matt weighs 879 N, so
-  # standing on one foot cost ~2000 per episode-step and falling (no contact, no penalty) became the optimum (m1b-m3:
-  # episode length fell while reward rose; contact_force -216000 per episode). Same 1.53 x body weight for Matt.
-  cfg.reward_config.max_contact_force = 1350.0
-  # The stock reward is sum(terms) * dt with termination -100 (= -2 per episode) and no alive bonus: a small bonus so
-  # staying up is worth more than the early orientation / pose penalties of a body that starts toppling at once.
-  cfg.reward_config.scales.alive = 1.0
-  # Off for Matt (his runs m5+ are unchanged); Grandma turns it on: see MattJoystick.step and grandma/env.py.
-  cfg.positive_reward = False
-  cfg.fall_height = 0.0   # m, pelvis height that ends an episode; 0 = stock termination only (Matt)
-  cfg.low_body_height = 0.0   # m, knee / elbow / wrist / torso origin height that ends an episode; 0 = off (Matt)
-  # m6 walked 0.6-0.8 m/s on any command above 1 and drifted left on a straight one. With the stock sigma 0.25 a 1.5 m/s
-  # command walked at 0.6 earns exp(-0.81 / 0.25) = 4 % of the tracking reward: no gradient towards speed (the Go2 r8
-  # stall). Wide-sigma copies of both tracking terms give that gradient; the sharp ones still set the precision.
-  # m8: sigma 1.5 -> 0.75 (at 1.5 m/s m7 walked 1.0, which 1.5 still paid 85 %).
-  cfg.reward_config.wide_sigma = 0.75
-  # m11: velocity terms 3.0 vs yaw terms 1.75. m10 had yaw 3.0 (1.5 + 0.5 + heading 1.0) vs velocity 2.0: standing still
-  # with a steady heading earns every yaw term, and after the upright-pose switch he settled there (0.15 m/s on 1.5).
-  cfg.reward_config.scales.tracking_lin_vel = 2.0
-  cfg.reward_config.scales.tracking_lin_vel_wide = 1.0
-  # m13: yaw back to 2.5 (still below velocity's 3.0). At 1.75 m12 reached 1.14 m/s on a 1.5 command but turned only
-  # +-0.1 rad/s of a +-0.6 command at that speed (a 15 m circle: wide on every bend).
-  cfg.reward_config.scales.tracking_ang_vel_wide = 0.5
-  cfg.reward_config.scales.tracking_ang_vel = 1.5
-  # Heading: integral of (commanded - actual) yaw rate since the command was drawn (clipped at 2 rad), rewarded as
-  # exp(-err^2 / heading_sigma). The yaw-rate term forgives a slow steady turn; the race steers by heading, so a
-  # 0.1 rad/s bias walks him off track. m7 (cost -2 err^2, clip 1) kept a +0.2 rad/s drift: the clip was reached in 5 s
-  # and the cost then had no gradient. m8 (cost -8, clip 2) paid up to 30x the alive bonus per step once drifted, so
-  # he learned to fall (episodes 1.4 s): a bounded positive reward cannot make an early end pay.
-  cfg.reward_config.scales.heading = 0.5
-  cfg.reward_config.heading_clip = 2.0
-  cfg.reward_config.heading_sigma = 0.1
-  # The stock pose cost (squared distance to the crouch, all joints) taxes stride length; the gait clock is fixed
-  # (1.25-1.5 Hz, Unity's GaitHz), so speed has to come from stride.
-  cfg.reward_config.scales.pose = -0.03
-  # Pushes at race scale. The stock kicks set the base velocity to +U(0.1, 2.0) m/s every 5-10 s: m9b fell in over half
-  # its training episodes (eval length 442 of 1000) and every run since m6 settled on a slow crouched shuffle (~0.6 m/s)
-  # that survives them. The race's shove bar is 30 N.s = 0.34 m/s on 89.6 kg (G.4); 0.5 keeps a margin.
-  cfg.push_config.magnitude_range = [0.1, 0.5]
-  cfg.njmax = 29 * 2 + CONTACTS_PER_ENV * 4
-  # Natural-motion terms (proposals r2, D2-D4 / D6 / D7 / D9). All off by default: a zero weight or probability adds
-  # nothing to the traced graph, so runs without them are unchanged. Turn on with train.py --set, e.g.
-  #   --set realism.gait_symmetry=-1.0 --set realism.action_delay_prob=0.5
-  cfg.realism = config_dict.create(
-      gait_symmetry=0.0,      # cost: |left - right| air time at each touchdown (s); a limp shows up as a steady gap
-      torso_ang_acc=0.0,      # cost: squared pelvis angular acceleration (rad/s^2)^2 * 1e-4: a steady torso
-      arm_swing=0.0,          # cost: shoulder pitch off the counter-swing of the opposite hip (rad^2), while moving
-      arm_swing_gain=0.5,     #   shoulder pitch change per rad of opposite hip pitch change (both axes 0 1 0: -= forward)
-      heat=0.0,               # cost: motor heat above budget; heat integrates (tau / tau_max)^2 and cools at heat_cool/s
-      heat_cool=0.15, heat_budget=1.0,
-      action_delay_prob=0.0,  # share of episodes whose actions land one control step (20 ms) late: reflex latency
-      cmd_accel=0.0,          # m/s^2 (and rad/s^2): the command ramps to each new target instead of jumping; episodes
-                              #   start from a standing command. Unity slews the same way (CmdSlewStep).
-      gait_hz_slope=0.0,      # Hz per m/s: stride frequency rises with |vx command| above gait_hz_v0 (proposals r3 D1;
-      gait_hz_v0=1.2,         #   humans ~0.9-1.0 Hz walking, 1.35-1.5 jogging). Same formula in sim.py and MattSpec.cs.
-  )
-  return cfg
+    cfg = stock.default_config()
+    cfg.sim_dt = 0.004
+    cfg.ctrl_dt = 0.02
+    cfg.lin_vel_x = [-0.3, 1.8]
+    cfg.lin_vel_y = [-0.4, 0.4]
+    cfg.ang_vel_yaw = [-1.0, 1.0]
+    cfg.reward_config.max_foot_height = 0.12
+    # The stock contact-force penalty counts foot force above 500 N: 1.53 x the G1's 327 N weight. Matt weighs 879 N, so
+    # standing on one foot cost ~2000 per episode-step and falling (no contact, no penalty) became the optimum (m1b-m3:
+    # episode length fell while reward rose; contact_force -216000 per episode). Same 1.53 x body weight for Matt.
+    cfg.reward_config.max_contact_force = 1350.0
+    # The stock reward is sum(terms) * dt with termination -100 (= -2 per episode) and no alive bonus: a small bonus so
+    # staying up is worth more than the early orientation / pose penalties of a body that starts toppling at once.
+    cfg.reward_config.scales.alive = 1.0
+    # Off for Matt (his runs m5+ are unchanged); Grandma turns it on: see MattJoystick.step and grandma/env.py.
+    cfg.positive_reward = False
+    cfg.fall_height = 0.0  # m, pelvis height that ends an episode; 0 = stock termination only (Matt)
+    cfg.low_body_height = 0.0  # m, knee / elbow / wrist / torso origin height that ends an episode; 0 = off (Matt)
+    # m6 walked 0.6-0.8 m/s on any command above 1 and drifted left on a straight one. With the stock sigma 0.25 a 1.5 m/s
+    # command walked at 0.6 earns exp(-0.81 / 0.25) = 4 % of the tracking reward: no gradient towards speed (the Go2 r8
+    # stall). Wide-sigma copies of both tracking terms give that gradient; the sharp ones still set the precision.
+    # m8: sigma 1.5 -> 0.75 (at 1.5 m/s m7 walked 1.0, which 1.5 still paid 85 %).
+    cfg.reward_config.wide_sigma = 0.75
+    # m11: velocity terms 3.0 vs yaw terms 1.75. m10 had yaw 3.0 (1.5 + 0.5 + heading 1.0) vs velocity 2.0: standing still
+    # with a steady heading earns every yaw term, and after the upright-pose switch he settled there (0.15 m/s on 1.5).
+    cfg.reward_config.scales.tracking_lin_vel = 2.0
+    cfg.reward_config.scales.tracking_lin_vel_wide = 1.0
+    # m13: yaw back to 2.5 (still below velocity's 3.0). At 1.75 m12 reached 1.14 m/s on a 1.5 command but turned only
+    # +-0.1 rad/s of a +-0.6 command at that speed (a 15 m circle: wide on every bend).
+    cfg.reward_config.scales.tracking_ang_vel_wide = 0.5
+    cfg.reward_config.scales.tracking_ang_vel = 1.5
+    # Heading: integral of (commanded - actual) yaw rate since the command was drawn (clipped at 2 rad), rewarded as
+    # exp(-err^2 / heading_sigma). The yaw-rate term forgives a slow steady turn; the race steers by heading, so a
+    # 0.1 rad/s bias walks him off track. m7 (cost -2 err^2, clip 1) kept a +0.2 rad/s drift: the clip was reached in 5 s
+    # and the cost then had no gradient. m8 (cost -8, clip 2) paid up to 30x the alive bonus per step once drifted, so
+    # he learned to fall (episodes 1.4 s): a bounded positive reward cannot make an early end pay.
+    cfg.reward_config.scales.heading = 0.5
+    cfg.reward_config.heading_clip = 2.0
+    cfg.reward_config.heading_sigma = 0.1
+    # The stock pose cost (squared distance to the crouch, all joints) taxes stride length; the gait clock is fixed
+    # (1.25-1.5 Hz, Unity's GaitHz), so speed has to come from stride.
+    cfg.reward_config.scales.pose = -0.03
+    # The standard penalty set (training/reward_config.json, mirrored by Unreal's URaceRewardConfig): the stock
+    # action_rate term (|a_t - a_{t-1}|^2, stock weight 0) takes the shared weight; torque^2, joint velocity^2 and a
+    # true foot-slip term (feet planar speed^2 while in contact; stock feet_slip is the pelvis speed) are added in
+    # MattJoystick._get_reward. The shipped brains predate these weights (not retrained).
+    pen = reward_config.penalties()
+    cfg.reward_config.scales.action_rate = pen["action_rate_sq"]
+    cfg.reward_config.scales.torque_sq = pen["torque_sq"]
+    cfg.reward_config.scales.joint_ang_vel_sq = pen["joint_ang_vel_sq"]
+    cfg.reward_config.scales.foot_slip = pen["foot_slip"]
+    # Pushes at race scale. The stock kicks set the base velocity to +U(0.1, 2.0) m/s every 5-10 s: m9b fell in over half
+    # its training episodes (eval length 442 of 1000) and every run since m6 settled on a slow crouched shuffle (~0.6 m/s)
+    # that survives them. The race's shove bar is 30 N.s = 0.34 m/s on 89.6 kg (G.4); 0.5 keeps a margin.
+    cfg.push_config.magnitude_range = [0.1, 0.5]
+    cfg.njmax = 29 * 2 + CONTACTS_PER_ENV * 4
+    # Natural-motion terms (proposals r2, D2-D4 / D6 / D7 / D9). All off by default: a zero weight or probability adds
+    # nothing to the traced graph, so runs without them are unchanged. Turn on with train.py --set, e.g.
+    #   --set realism.gait_symmetry=-1.0 --set realism.action_delay_prob=0.5
+    cfg.realism = config_dict.create(
+        gait_symmetry=0.0,  # cost: |left - right| air time at each touchdown (s); a limp shows up as a steady gap
+        torso_ang_acc=0.0,  # cost: squared pelvis angular acceleration (rad/s^2)^2 * 1e-4: a steady torso
+        arm_swing=0.0,  # cost: shoulder pitch off the counter-swing of the opposite hip (rad^2), while moving
+        arm_swing_gain=0.5,  #   shoulder pitch change per rad of opposite hip pitch change (both axes 0 1 0: -= forward)
+        heat=0.0,  # cost: motor heat above budget; heat integrates (tau / tau_max)^2 and cools at heat_cool/s
+        heat_cool=0.15,
+        heat_budget=1.0,
+        action_delay_prob=0.0,  # share of episodes whose actions land one control step (20 ms) late: reflex latency
+        cmd_accel=0.0,  # m/s^2 (and rad/s^2): the command ramps to each new target instead of jumping; episodes
+        #   start from a standing command. Unity slews the same way (CmdSlewStep).
+        gait_hz_slope=0.0,  # Hz per m/s: stride frequency rises with |vx command| above gait_hz_v0 (proposals r3 D1;
+        gait_hz_v0=1.2,  #   humans ~0.9-1.0 Hz walking, 1.35-1.5 jogging). Same formula in sim.py and MattSpec.cs.
+    )
+    return cfg
 
 
 class MattJoystick(stock.Joystick):
-  XML_PATH = XML   # a human body in the G1 layout (Grandma: grandma/env.py)
+    XML_PATH = XML  # a human body in the G1 layout (Grandma: grandma/env.py)
 
-  def __init__(self, config: config_dict.ConfigDict = None,
-               config_overrides: Optional[Dict[str, Union[str, int, list[Any]]]] = None):
-    g1_base.G1Env.__init__(self, xml_path=str(self.XML_PATH), config=config or default_config(), config_overrides=config_overrides)
-    self._post_init()
-    self._rz = self._config.realism
-    adr = lambda n: self._mj_model.joint(f"{n}_joint").qposadr[0] - 7
-    self._swing = jp.array([adr("left_shoulder_pitch"), adr("right_shoulder_pitch"), adr("right_hip_pitch"), adr("left_hip_pitch")])
-    self._tau_max = jp.array(self._mj_model.actuator_forcerange[:, 1])
-    self._low_bodies = jp.array([self._mj_model.body(n).id for n in (
-        "left_knee_link", "right_knee_link", "left_elbow_link", "right_elbow_link",
-        "left_wrist_yaw_link", "right_wrist_yaw_link", "torso_link")])
-    # the stock step() weights every reward by reward_config.scales[k]: the realism costs carry their own weight
-    with self._config.unlocked():   # G1Env locks the config
-      for k in ("gait_symmetry", "torso_ang_acc", "arm_swing", "heat"):
-        if self._rz[k]: self._config.reward_config.scales[k] = 1.0
+    def __init__(
+        self,
+        config: config_dict.ConfigDict = None,
+        config_overrides: dict[str, str | int | list[Any]] | None = None,
+    ):
+        g1_base.G1Env.__init__(
+            self, xml_path=str(self.XML_PATH), config=config or default_config(), config_overrides=config_overrides
+        )
+        self._post_init()
+        self._rz = self._config.realism
+        adr = lambda n: self._mj_model.joint(f"{n}_joint").qposadr[0] - 7
+        self._swing = jp.array(
+            [adr("left_shoulder_pitch"), adr("right_shoulder_pitch"), adr("right_hip_pitch"), adr("left_hip_pitch")]
+        )
+        self._tau_max = jp.array(self._mj_model.actuator_forcerange[:, 1])
+        self._low_bodies = jp.array(
+            [
+                self._mj_model.body(n).id
+                for n in (
+                    "left_knee_link",
+                    "right_knee_link",
+                    "left_elbow_link",
+                    "right_elbow_link",
+                    "left_wrist_yaw_link",
+                    "right_wrist_yaw_link",
+                    "torso_link",
+                )
+            ]
+        )
+        # the stock step() weights every reward by reward_config.scales[k]: the realism costs carry their own weight
+        with self._config.unlocked():  # G1Env locks the config
+            for k in ("gait_symmetry", "torso_ang_acc", "arm_swing", "heat"):
+                if self._rz[k]:
+                    self._config.reward_config.scales[k] = 1.0
 
-  def reset(self, rng):
-    rng, delay_rng = jax.random.split(rng)
-    state = super().reset(rng)
-    state.info["heading_err"] = jp.zeros(())
-    rz = self._rz
-    if rz.gait_symmetry: state.info["air_last"] = jp.zeros(2)
-    if rz.torso_ang_acc: state.info["prev_gyro"] = jp.zeros(3)
-    if rz.heat: state.info["heat"] = jp.zeros(self.mjx_model.nu)
-    if rz.action_delay_prob:
-      state.info["act_delay"] = jax.random.bernoulli(delay_rng, rz.action_delay_prob)
-      state.info["prev_act"] = jp.zeros(self.mjx_model.nu)
-    if rz.cmd_accel:
-      state.info["cmd_target"] = state.info["command"]; state.info["command"] = jp.zeros(3)
-    if rz.gait_hz_slope: state.info["phase_dt0"] = state.info["phase_dt"]
-    return state
+    def reset(self, rng):
+        rng, delay_rng = jax.random.split(rng)
+        state = super().reset(rng)
+        state.info["heading_err"] = jp.zeros(())
+        rz = self._rz
+        if rz.gait_symmetry:
+            state.info["air_last"] = jp.zeros(2)
+        if rz.torso_ang_acc:
+            state.info["prev_gyro"] = jp.zeros(3)
+        if rz.heat:
+            state.info["heat"] = jp.zeros(self.mjx_model.nu)
+        if rz.action_delay_prob:
+            state.info["act_delay"] = jax.random.bernoulli(delay_rng, rz.action_delay_prob)
+            state.info["prev_act"] = jp.zeros(self.mjx_model.nu)
+        if rz.cmd_accel:
+            state.info["cmd_target"] = state.info["command"]
+            state.info["command"] = jp.zeros(3)
+        if rz.gait_hz_slope:
+            state.info["phase_dt0"] = state.info["phase_dt"]
+        return state
 
-  def step(self, state, action):
-    rz = self._rz
-    if rz.action_delay_prob:   # the late episodes apply last step's policy output (obs keep showing what was applied)
-      applied = jp.where(state.info["act_delay"], state.info["prev_act"], action)
-      state.info["prev_act"] = action; action = applied
-    prev_cmd = state.info["command"]
-    if rz.gait_hz_slope:   # stock step() builds the obs, then advances the phase by info["phase_dt"]: set it from this step's command
-      extra = rz.gait_hz_slope * jp.maximum(0.0, jp.abs(prev_cmd[0]) - rz.gait_hz_v0)
-      state.info["phase_dt"] = state.info["phase_dt0"] + 2 * jp.pi * self.dt * extra
-    state = super().step(state, action)
-    if self._config.positive_reward:
-      # Floor the living part of each step's reward at 0 (legged_gym's only_positive_rewards); the termination penalty
-      # stays outside the floor, so ending an episode can never pay more than staying up. Off by default (Matt, G1).
-      term = self._config.reward_config.scales.termination * state.done * self.dt
-      state = state.replace(reward=jp.maximum(state.reward - term, 0.0) + term)
-    if rz.cmd_accel:
-      # stock step() resamples the command every 500 steps (and resets on done): a changed value is a new target
-      new = state.info["command"]
-      tgt = jp.where(jp.any(new != prev_cmd), new, state.info["cmd_target"])
-      dv = rz.cmd_accel * self.dt
-      state.info["cmd_target"] = tgt; state.info["command"] = prev_cmd + jp.clip(tgt - prev_cmd, -dv, dv)
-    return state
+    def step(self, state, action):
+        rz = self._rz
+        if (
+            rz.action_delay_prob
+        ):  # the late episodes apply last step's policy output (obs keep showing what was applied)
+            applied = jp.where(state.info["act_delay"], state.info["prev_act"], action)
+            state.info["prev_act"] = action
+            action = applied
+        prev_cmd = state.info["command"]
+        if (
+            rz.gait_hz_slope
+        ):  # stock step() builds the obs, then advances the phase by info["phase_dt"]: set it from this step's command
+            extra = rz.gait_hz_slope * jp.maximum(0.0, jp.abs(prev_cmd[0]) - rz.gait_hz_v0)
+            state.info["phase_dt"] = state.info["phase_dt0"] + 2 * jp.pi * self.dt * extra
+        state = super().step(state, action)
+        if self._config.positive_reward:
+            # Floor the living part of each step's reward at 0 (legged_gym's only_positive_rewards); the termination penalty
+            # stays outside the floor, so ending an episode can never pay more than staying up. Off by default (Matt, G1).
+            term = self._config.reward_config.scales.termination * state.done * self.dt
+            state = state.replace(reward=jp.maximum(state.reward - term, 0.0) + term)
+        if rz.cmd_accel:
+            # stock step() resamples the command every 500 steps (and resets on done): a changed value is a new target
+            new = state.info["command"]
+            tgt = jp.where(jp.any(new != prev_cmd), new, state.info["cmd_target"])
+            dv = rz.cmd_accel * self.dt
+            state.info["cmd_target"] = tgt
+            state.info["command"] = prev_cmd + jp.clip(tgt - prev_cmd, -dv, dv)
+        return state
 
-  def _get_termination(self, data):
-    done = super()._get_termination(data)
-    # Optional: a pelvis under fall_height ends the episode (the ladder's "fallen"). The stock test only ends on an
-    # upside-down torso, so a body sitting on the floor lives on (g2: 978 / 1000 steps sitting, zero foot force).
-    if self._config.fall_height: done = done | (data.qpos[2] < self._config.fall_height)
-    # Optional: a knee, elbow, wrist or the torso near the floor ends it too (g5 kneeled / propped on a hand with the
-    # pelvis still above fall_height: toddler 0/10 with 240-440 non-foot floor contacts).
-    if self._config.low_body_height:
-      done = done | jp.any(data.xpos[self._low_bodies, 2] < self._config.low_body_height)
-    return done
+    def _get_termination(self, data):
+        done = super()._get_termination(data)
+        # Optional: a pelvis under fall_height ends the episode (the ladder's "fallen"). The stock test only ends on an
+        # upside-down torso, so a body sitting on the floor lives on (g2: 978 / 1000 steps sitting, zero foot force).
+        if self._config.fall_height:
+            done = done | (data.qpos[2] < self._config.fall_height)
+        # Optional: a knee, elbow, wrist or the torso near the floor ends it too (g5 kneeled / propped on a hand with the
+        # pelvis still above fall_height: toddler 0/10 with 240-440 non-foot floor contacts).
+        if self._config.low_body_height:
+            done = done | jp.any(data.xpos[self._low_bodies, 2] < self._config.low_body_height)
+        return done
 
-  def _get_reward(self, data, action, info, metrics, done, first_contact, contact):
-    r = super()._get_reward(data, action, info, metrics, done, first_contact, contact)
-    cmd, sig = info["command"], self._config.reward_config.wide_sigma
-    v, w = self.get_local_linvel(data, "pelvis"), self.get_gyro(data, "pelvis")
-    r["tracking_lin_vel_wide"] = jp.exp(-jp.sum(jp.square(cmd[:2] - v[:2])) / sig)
-    r["tracking_ang_vel_wide"] = jp.exp(-jp.square(cmd[2] - w[2]) / sig)
-    # step is 0 on an episode's first step and right after a new command is drawn (stock step())
-    err = jp.where(info["step"] == 0, 0.0, info["heading_err"]) + (cmd[2] - w[2]) * self.dt
-    clip = self._config.reward_config.heading_clip
-    info["heading_err"] = jp.clip(err, -clip, clip)
-    r["heading"] = jp.exp(-jp.square(info["heading_err"]) / self._config.reward_config.heading_sigma)
-    # realism costs: returned already weighted, under scale 1 (registered in __init__)
-    rz, moving = self._rz, (jp.linalg.norm(cmd[:2]) > 0.1).astype(jp.float32)
-    if rz.gait_symmetry:
-      air = jp.where(first_contact, info["feet_air_time"], info["air_last"]); info["air_last"] = air
-      both = jp.all(air > 0).astype(jp.float32)
-      r["gait_symmetry"] = rz.gait_symmetry * both * jp.any(first_contact) * jp.abs(air[0] - air[1])
-    if rz.torso_ang_acc:
-      acc = (w - info["prev_gyro"]) / self.dt; info["prev_gyro"] = w
-      r["torso_ang_acc"] = rz.torso_ang_acc * 1e-4 * jp.where(info["step"] == 0, 0.0, jp.sum(jp.square(acc)))
-    if rz.arm_swing:
-      dq = data.qpos[7:][self._swing] - self._default_pose[self._swing]   # L sh, R sh, R hip, L hip
-      g = rz.arm_swing_gain
-      r["arm_swing"] = rz.arm_swing * moving * (jp.square(dq[0] - g * dq[2]) + jp.square(dq[1] - g * dq[3]))
-    if rz.heat:
-      load = jp.square(data.actuator_force / self._tau_max)
-      info["heat"] = jp.maximum(0.0, info["heat"] + (load - rz.heat_cool) * self.dt)
-      r["heat"] = rz.heat * jp.sum(jp.maximum(0.0, info["heat"] - rz.heat_budget))
-    return r
+    def _get_reward(self, data, action, info, metrics, done, first_contact, contact):
+        r = super()._get_reward(data, action, info, metrics, done, first_contact, contact)
+        cmd, sig = info["command"], self._config.reward_config.wide_sigma
+        v, w = self.get_local_linvel(data, "pelvis"), self.get_gyro(data, "pelvis")
+        r["tracking_lin_vel_wide"] = jp.exp(-jp.sum(jp.square(cmd[:2] - v[:2])) / sig)
+        r["tracking_ang_vel_wide"] = jp.exp(-jp.square(cmd[2] - w[2]) / sig)
+        # step is 0 on an episode's first step and right after a new command is drawn (stock step())
+        err = jp.where(info["step"] == 0, 0.0, info["heading_err"]) + (cmd[2] - w[2]) * self.dt
+        clip = self._config.reward_config.heading_clip
+        info["heading_err"] = jp.clip(err, -clip, clip)
+        r["heading"] = jp.exp(-jp.square(info["heading_err"]) / self._config.reward_config.heading_sigma)
+        # the standard penalties (weights: training/reward_config.json via default_config)
+        r["torque_sq"] = jp.sum(jp.square(data.actuator_force))
+        r["joint_ang_vel_sq"] = jp.sum(jp.square(data.qvel[6:]))
+        feet_vel_xy = data.sensordata[self._foot_linvel_sensor_adr][..., :2]
+        r["foot_slip"] = jp.sum(jp.sum(jp.square(feet_vel_xy), axis=-1) * contact)
+        # realism costs: returned already weighted, under scale 1 (registered in __init__)
+        rz, moving = self._rz, (jp.linalg.norm(cmd[:2]) > 0.1).astype(jp.float32)
+        if rz.gait_symmetry:
+            air = jp.where(first_contact, info["feet_air_time"], info["air_last"])
+            info["air_last"] = air
+            both = jp.all(air > 0).astype(jp.float32)
+            r["gait_symmetry"] = rz.gait_symmetry * both * jp.any(first_contact) * jp.abs(air[0] - air[1])
+        if rz.torso_ang_acc:
+            acc = (w - info["prev_gyro"]) / self.dt
+            info["prev_gyro"] = w
+            r["torso_ang_acc"] = rz.torso_ang_acc * 1e-4 * jp.where(info["step"] == 0, 0.0, jp.sum(jp.square(acc)))
+        if rz.arm_swing:
+            dq = data.qpos[7:][self._swing] - self._default_pose[self._swing]  # L sh, R sh, R hip, L hip
+            g = rz.arm_swing_gain
+            r["arm_swing"] = rz.arm_swing * moving * (jp.square(dq[0] - g * dq[2]) + jp.square(dq[1] - g * dq[3]))
+        if rz.heat:
+            load = jp.square(data.actuator_force / self._tau_max)
+            info["heat"] = jp.maximum(0.0, info["heat"] + (load - rz.heat_cool) * self.dt)
+            r["heat"] = rz.heat * jp.sum(jp.maximum(0.0, info["heat"] - rz.heat_budget))
+        return r

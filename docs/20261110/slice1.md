@@ -12,7 +12,7 @@ Result: **PASS**. Unreal + URLab + MuJoCo 4.0.0 moves the Go2 exactly as the tra
 | Model readback | 140 physics arrays, 0 differ |
 
 Run it: `cd training; uv run --no-project --python 3.12 --with mujoco==4.0.0 --with onnxruntime --with numpy python parity_check.py run`
-(or `Scripts/verify_all.ps1 -Only parity`). Results: `docs/parity/ue_parity.json`.
+(or `scripts/verify_all.ps1 -Only parity`). Results: `docs/parity/ue_parity.json`.
 
 ## What URLab got wrong, and the fix
 

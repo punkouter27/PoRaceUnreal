@@ -5,7 +5,7 @@ Python reference race.
 
 ## Results
 
-`Scripts/regress.ps1 -Track planar_sprint -Seeds "1,2,3,4,5"`:
+`scripts/regress.ps1 -Track planar_sprint -Seeds "1,2,3,4,5"`:
 
 | Seed | Unreal | Python, same model | Python, track file | Checks |
 |---|---|---|---|---|
@@ -59,7 +59,7 @@ cruise speed (1.41–1.5 m/s, as Unity's 4-racer races did), so times scale with
 - `training/racelib/` (track, rng, go2racer, race), `training/race.py`, `training/build_track_model.py`
 - `Source/PoRaceUnreal/`: `RaceTrack`, `RaceRng.h`, `RacerGo2`, `RaceRules`, `RaceModel`, `RaceHUD`, `RaceDirector`,
   `RacerController` (race + testbed)
-- `Scripts/build_track.py` (the level), `Scripts/regress.ps1`
+- `scripts/build_track.py` (the level), `scripts/regress.ps1`
 - Screenshots: `Saved/PoRace/shots/` (`-RaceShots=<dir>`), not committed.
 
 ## Open

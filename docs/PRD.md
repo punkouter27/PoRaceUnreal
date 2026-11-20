@@ -1,6 +1,6 @@
 # PoRace — Product Requirements Document
 
-Status: draft for approval, 2026-11-10. This document describes the product only. How it is built is in `SPEC.md`.
+Status: draft for approval, 2026-11-10. This document describes the product only. How it is built is in `docs/spec.md`.
 
 ## 1. Executive summary and vision
 
