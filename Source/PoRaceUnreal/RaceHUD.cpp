@@ -20,6 +20,9 @@
 #include "RaceDirector.h"
 #include "RaceNames.h"
 #include "RaceProbe.h"
+#include "RaceRewardConfig.h"
+#include "RaceShowcase.h"
+#include "Racer.h"
 #include "EngineUtils.h"
 #include "InputCoreTypes.h"
 #include "Rendering/SlateRenderer.h"
@@ -71,6 +74,15 @@ void ARaceHUD::BeginPlay()
 	}
 	if (bMenu) BuildMenu();
 	else BuildRace();
+	if (URaceShowcaseSubsystem* Showcase = URaceShowcaseSubsystem::Get(this))
+	{
+		Showcase->OnDemoModeChanged.AddUObject(this, &ARaceHUD::HandleDemoMode);
+		Showcase->OnDemoCamera.AddUObject(this, &ARaceHUD::HandleDemoCamera);
+		Showcase->SetRewardNote(TEXT("proxy: leader's distance, m"));
+		// a race that demo mode started keeps showing it (any input ends it)
+		const URaceGameInstance* GI = GetGameInstance<URaceGameInstance>();
+		if (!bMenu && GI && GI->bDemo) Showcase->StartDemo();
+	}
 	UE_LOG(LogRace, Log, TEXT("hud: %s, %d tracks (%d built), %d racers (%d ready)"), bMenu ? TEXT("menu") : TEXT("race"),
 		Tracks.Num(), Tracks.FilterByPredicate([](const FRaceTrackInfo& T) { return T.bBuilt; }).Num(),
 		Roster.Num(), Roster.FilterByPredicate([](const FRaceRacerInfo& R) { return R.bReady; }).Num());
@@ -142,6 +154,16 @@ void ARaceHUD::DrawHUD()
 
 	if (!Controller.IsValid()) Controller = URacerController::Find(GetWorld());
 	if (Controller.IsValid()) Controller->GetHud(Race);
+	ReportShowcase();
+	if (bDemo)	// demo mode: no HUD; the racers run on their brains, the cameras cycle, races follow each other
+	{
+		if (Race.Phase == ERacePhase::Finished)
+		{
+			if (ResultsAt < 0.0) ResultsAt = Now;
+			if (Now - ResultsAt > 4.0) { ResultsAt = -1.0; Rematch(); }
+		}
+		return;
+	}
 
 	// rates: frames drawn and physics steps per wall second
 	if (LastWall > 0.0)
@@ -387,6 +409,68 @@ void ARaceHUD::TogglePause()
 	bPaused = !bPaused;
 	Mgr->PhysicsEngine->bIsPaused = bPaused;	// the physics clock stops: the race resumes exactly where it was (R-13)
 	UE_LOG(LogRace, Log, TEXT("hud: %s"), bPaused ? TEXT("paused") : TEXT("resumed"));
+}
+
+void ARaceHUD::ReportShowcase()
+{
+	URaceShowcaseSubsystem* Showcase = URaceShowcaseSubsystem::Get(this);
+	if (!Showcase) return;
+	const int32 Calls = FRaceBrain::InferenceCalls.exchange(0, std::memory_order_relaxed);
+	const uint64 Cycles = FRaceBrain::InferenceCycles.exchange(0, std::memory_order_relaxed);
+	if (Calls > 0) Showcase->ReportInferenceMs(static_cast<float>(FPlatformTime::ToMilliseconds64(Cycles) / Calls));
+	if (Race.Rows.Num() > 0)
+	{
+		Showcase->ReportEpisodeReward(static_cast<float>(Race.Rows[0].Distance));
+		// curriculum stage: the leader's brain, named by the rung its training reached (training/reward_config.json)
+		const FRaceRacerInfo* Leader = RaceRegistry::FindRacer(Roster, Race.Rows[0].Name.ToLower());
+		const FString Brain = Leader ? Leader->Brain : FString();
+		FString Stage = Brain.IsEmpty() ? TEXT("n/a") : Brain;
+		if (const URaceRewardConfig* Rewards = URaceShowcaseSettings::GetRewardConfig())
+		{
+			for (int32 i = Rewards->CurriculumStages.Num() - 1; i >= 0; --i)
+			{
+				if (!Brain.IsEmpty() && Brain.Contains(Rewards->CurriculumStages[i].Stage))
+				{
+					Stage = FString::Printf(TEXT("%s (%s)"), *Rewards->CurriculumStages[i].Stage, *Brain);
+					break;
+				}
+			}
+		}
+		Showcase->SetCurriculumStage(Stage);
+	}
+}
+
+void ARaceHUD::HandleDemoMode(bool bActive)
+{
+	bDemo = bActive;
+	URaceGameInstance* GI = GetGameInstance<URaceGameInstance>();
+	if (GI) GI->bDemo = bActive;
+	if (bActive)
+	{
+		PreDemoAppMode = AppModeIndex;
+		AppModeIndex = 0;	// Watch: every racer on its trained brain
+		if (bPaused) TogglePause();
+		if (bMenu) { Start(); return; }	// the menu starts a race with the current choices
+	}
+	else
+	{
+		AppModeIndex = PreDemoAppMode;
+	}
+	if (Ui.IsValid())
+	{
+		if (bActive) { PreDemoUiVisibility = Ui->GetVisibility(); Ui->SetVisibility(EVisibility::Collapsed); }
+		else Ui->SetVisibility(PreDemoUiVisibility);
+	}
+}
+
+void ARaceHUD::HandleDemoCamera(FName CameraName, int32 Index)
+{
+	for (TActorIterator<ARaceDirector> It(GetWorld()); It; ++It)
+	{
+		It->SetCameraMode(CameraName == TEXT("Follow") ? ERaceCameraMode::Follow : CameraName == TEXT("Orbit") ? ERaceCameraMode::Orbit
+			: CameraName == TEXT("Free") ? ERaceCameraMode::Free : ERaceCameraMode::Broadcast);
+		break;
+	}
 }
 
 void ARaceHUD::BackToMenu()

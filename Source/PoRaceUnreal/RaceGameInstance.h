@@ -20,6 +20,7 @@ public:
 	bool bHandicap = false;			// head starts (?Handicap=1)
 	int32 Loops = 0;				// races completed this session (the loop test counts them)
 	double FirstLoopMB = 0.0;		// memory at the end of the first loop (the leak check)
+	bool bDemo = false;				// idle demo mode (RaceShowcase) started this race: the next level keeps showing it
 
 	/** Opens the track's level with these choices and a fresh seed: ?Racers=blue,matt?Laps=2?Seed=<n>[?Handicap=1]. */
 	void StartRace(UObject* Context);

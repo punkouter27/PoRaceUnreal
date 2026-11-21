@@ -18,6 +18,9 @@ struct FRaceBrain
 	int32 NumIn = 0;
 	FString Label;
 	static std::atomic<int32> NanInfCount;
+	/** Inference time summed over Run() calls since the HUD last read it (physics thread -> game thread). */
+	static std::atomic<uint64> InferenceCycles;
+	static std::atomic<int32> InferenceCalls;
 
 	bool Load(UNNEModelData* Data);
 	bool IsValid() const { return Net.IsValid(); }

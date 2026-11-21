@@ -7,7 +7,7 @@
 class UPoseableMeshComponent;
 
 /**
- * The stroller's scanned mesh (C:/Users/punko/Downloads/Stroller/Unreal/SK_Stroller.fbx), posed from its MuJoCo bodies
+ * The stroller's scanned mesh (the source FBX SK_Stroller.fbx, imported to Content/Racers), posed from its MuJoCo bodies
  * every frame (drawing only). The rig has a root bone and one bone per wheel at the hub (training/stroller/make_model.py
  * uses the same hub positions), so the mesh rides the chassis body and each wheel bone turns with its wheel body (the
  * front one also steers). Mesh-to-chassis alignment is measured at start from the three hubs, not assumed from the FBX

@@ -11,8 +11,7 @@ Plugins/*/Binaries/
 Plugins/*/Intermediate/
 Logs/
 
-# URLab clone (local changes are kept in Plugins/urlab_porace.patch)
-Plugins/UnrealRoboticsLab/
+# URLab is vendored in Plugins/UnrealRoboticsLab (tracked; its Binaries/Intermediate are ignored above)
 
 # Python / training
 __pycache__/

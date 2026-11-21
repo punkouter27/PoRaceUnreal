@@ -7,6 +7,8 @@
 #include <cmath>
 
 std::atomic<int32> FRaceBrain::NanInfCount{ 0 };
+std::atomic<uint64> FRaceBrain::InferenceCycles{ 0 };
+std::atomic<int32> FRaceBrain::InferenceCalls{ 0 };
 
 void FRaceBrain::AppendZeroInitInputs(TArray<float>& Obs, int32 ExtraCount)
 {
@@ -45,7 +47,10 @@ bool FRaceBrain::Run(const float* InObs, float* OutAction, int32 NumAction) cons
 {
 	const UE::NNE::FTensorBindingCPU In{ (void*)InObs, (uint64)NumIn * sizeof(float) };
 	const UE::NNE::FTensorBindingCPU Out{ OutAction, (uint64)NumAction * sizeof(float) };
+	const uint64 T0 = FPlatformTime::Cycles64();
 	const bool bOk = Net->RunSync({ In }, { Out }) == UE::NNE::EResultStatus::Ok;
+	InferenceCycles.fetch_add(FPlatformTime::Cycles64() - T0, std::memory_order_relaxed);
+	InferenceCalls.fetch_add(1, std::memory_order_relaxed);
 	if (bOk && OutAction)
 	{
 		for (int32 i = 0; i < NumAction; ++i)

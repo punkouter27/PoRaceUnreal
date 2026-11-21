@@ -13,7 +13,7 @@ physics authority; Unreal renders and presents the simulation. Read `docs/spec.m
 | `Plugins/UnrealRoboticsLab/` | URLab (MuJoCo in Unreal), vendored at a pinned commit with this repo's patch applied |
 | `training/` | Brax / mujoco_playground PPO trainer, contracts (`contract.py`), reward weights (`reward_config.json`) |
 | `tests/` | pytest suite (`pytest` from the repo root) |
-| `scripts/` | Unreal editor Python (`build_track.py`, ...), `regress.ps1`, `verify_all.ps1`, `setup_urlab.ps1` |
+| `scripts/` | Unreal editor Python (`build_track.py`, ...), `regress.ps1`, `verify_all.ps1`, `setup_urlab.ps1` (editor-Python packages for the vendored URLab) |
 | `tools/` | Blender / Android / maintenance helpers |
 | `web/` | Static showcase site + `/diag`, built by `web/build.py`, deployed to `swa-poraceunreal` |
 | `docs/` | Spec, PRD, plan / todo (`docs/tasks/`), slice reports, proposals |

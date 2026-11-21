@@ -3,6 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/HUD.h"
 #include "GameFramework/PlayerController.h"
+#include "Layout/Visibility.h"
 #include "RaceRegistry.h"
 #include "RacerController.h"
 #include "RaceHUD.generated.h"
@@ -86,6 +87,14 @@ private:
 	void NextTrack();
 	void BackToMenu();
 	void CountLoop();
+
+	// --- idle demo mode + diagnostics overlay (RaceShowcase) ---
+	bool bDemo = false;
+	int32 PreDemoAppMode = 0;
+	EVisibility PreDemoUiVisibility = EVisibility::Visible;
+	void HandleDemoMode(bool bActive);
+	void HandleDemoCamera(FName CameraName, int32 Index);
+	void ReportShowcase();
 
 	// --- Canvas ---
 	double FpsSmooth = 0.0, HzSmooth = 0.0, LastWall = 0.0;
