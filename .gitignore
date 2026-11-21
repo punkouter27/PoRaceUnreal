@@ -35,3 +35,6 @@ training/replays/
 # URLab's importer converts each .obj it imports to a .glb beside it
 training/assets/**/*.glb
 training/assets/**/*_ue.xml
+
+# Local clone of the URLab plugin (own git repo, ~2.3 GB with build output); not part of this repo
+Plugins/UnrealRoboticsLab/
