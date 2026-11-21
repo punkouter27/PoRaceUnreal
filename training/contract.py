@@ -13,6 +13,7 @@ child spec, which drops the file's <option> block (PoSlapUnreal found this), so 
 
 import argparse
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -315,6 +316,32 @@ TARGETS = {
 }
 
 
+def _json_equal(a, b, tol=1e-12):
+    """Structural JSON comparison allowing 1e-12 float tolerance across Windows/Linux libm."""
+    if isinstance(a, float) and isinstance(b, float):
+        return math.isclose(a, b, rel_tol=tol, abs_tol=tol)
+    if type(a) is not type(b):
+        return False
+    if isinstance(a, dict):
+        return a.keys() == b.keys() and all(_json_equal(a[k], b[k], tol) for k in a)
+    if isinstance(a, list):
+        return len(a) == len(b) and all(_json_equal(x, y, tol) for x, y in zip(a, b, strict=True))
+    return a == b
+
+
+def _matches(path: Path, old: str | None, text: str) -> bool:
+    if old is None:
+        return False
+    if old == text:
+        return True
+    if path.suffix == ".json":
+        try:
+            return _json_equal(json.loads(old), json.loads(text))
+        except json.JSONDecodeError:
+            return False
+    return False
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true", help="do not write; exit 1 if a generated file differs")
@@ -324,7 +351,7 @@ def main():
     for path, make in TARGETS.items():
         text = make()
         old = path.read_text(encoding="utf-8").replace("\r\n", "\n") if path.exists() else None
-        if old == text:
+        if _matches(path, old, text):
             print(f"up to date  {path.relative_to(ROOT)}")
         elif a.check:
             stale.append(path)
