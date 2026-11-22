@@ -54,8 +54,8 @@ physics authority; Unreal renders and presents the simulation. Read `docs/spec.m
 - The workflow confirms the deploy by the `X-Commit` header on `/` (written by `web/build.py` into the Static Web App
   config) matching the pushed commit, plus `version.json`, `/` and `/diag`.
 - The Unreal project is built and tested locally (GitHub's runners have no Unreal Engine). After a fresh clone run
-  `scripts/setup_urlab.ps1` first (URLab is not tracked; see the repo map). This deviates from the standard below
-  ("vendored INSIDE this repo") by the owner's decision in ca8af3d.
+  `scripts/setup_urlab.ps1` first (URLab is not tracked; see the repo map). v3 does not require vendoring, so this is
+  not a deviation (owner decision ca8af3d).
 
 ## Coding standard
 
@@ -69,6 +69,21 @@ physics authority; Unreal renders and presents the simulation. Read `docs/spec.m
   re-import (`scripts/build_track.py`) move the new meshes to `/Game/Project/Environments/MuJoCoImports` in the editor.
 - Web (`web/`): plain HTML/CSS/JS, the Po tokens in `style.css`, text >= 4.5:1. Version stamp from `web/build.py` only.
 
+### Deliberate deviations
+
+| Deviation | Why | Commit sha / date | How to undo |
+|---|---|---|---|
+| URLab is git-ignored and rebuilt by `scripts/setup_urlab.ps1` (pinned upstream commit + `Plugins/urlab_porace.patch`). Not a deviation from v3: vendoring is not required | owner decision (2.3 GB clone) | `ca8af3d` (owner) 2026-11-21 | track the plugin again |
+| Web `/diag` footer: sticky at the viewport bottom above 600 px (content scrolls under the 20 px strip); after the content on phones | owner layout kept on desktop; a fixed stamp covered content on phones | `fda29fc` 2026-11-22 | `git revert fda29fc` (stamp part) |
+| `/diag`: a service switched off on purpose shows a neutral **Off**, not counted | not a fault | `fda29fc` 2026-11-22 | — |
+| Gaze is render-only | the racers' MJCF has no neck joint; frozen contracts | `fda29fc` 2026-11-22 | owner decision |
+| Shipped brains predate the torque² / joint angular velocity² (and humans' action-rate / foot-slip) penalties | not retrained (owner decision) | — | retrain through the gates |
+| `Content/Art/` holds raw source files, not assets; no `Core`/`UI` assets (HUD is C++ Slate) | files, not cooked assets | `ffa6927` 2026-11-22 | — |
+| Unreal is built and tested locally only; CI runs the Python checks and the showcase site | no Unreal Engine on GitHub runners | — | — |
+
+**Hosting:** Azure Static Web App `swa-poraceunreal` (RG `PoShared`), Free tier. Never run test suites against the live
+site; live checks = at most 6 page loads + /diag + X-Commit.
+
 ## Concurrent work
 
 - One game engine or headless browser at a time on this machine: never run two UnrealEditor / UnrealEditor-Cmd
@@ -76,9 +91,17 @@ physics authority; Unreal renders and presents the simulation. Read `docs/spec.m
   build (`Build.bat` waits on the UBT mutex with `-WaitMutex`).
 - Other agents may be editing other Po repos: touch only this repo. Stage only the files you changed (`git add <paths>`),
   never `git add -A`; leave unrelated local work alone; fetch and rebase your own unpushed commits before pushing.
-- Never run full test suites against the live site (a Free Static Web App): live checks are a handful of page loads.
 
 ## Verify (exact commands)
+
+One command sequence verifies the repo (after `scripts\setup_urlab.ps1` once per clone; close the editor first):
+
+```powershell
+ruff check . && ruff format --check . && python -m pytest && python web/build.py --check && powershell -File scripts\verify_all.ps1 -Unreal
+```
+
+Last full run (2026-11-22): pytest 35 passed; build 0 warnings in `Source/PoRaceUnreal`; RaceUiTest 0 failures at
+1280x720, 540x1170, 1600x900 and 450x800; 307 assets, 0 redirectors. The steps one by one:
 
 ```powershell
 # Python (3.12 venv with the [dependency-groups] dev list from pyproject.toml)

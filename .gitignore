@@ -11,7 +11,7 @@ Plugins/*/Binaries/
 Plugins/*/Intermediate/
 Logs/
 
-# URLab is vendored in Plugins/UnrealRoboticsLab (tracked; its Binaries/Intermediate are ignored above)
+# URLab is NOT tracked: Plugins/UnrealRoboticsLab is git-ignored and recreated by scripts/setup_urlab.ps1 (ca8af3d)
 
 # Python / training
 __pycache__/
