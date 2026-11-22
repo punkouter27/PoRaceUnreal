@@ -3,11 +3,14 @@
 #include "AnimationRuntime.h"
 #include "Components/PoseableMeshComponent.h"
 #include "EngineUtils.h"
+#include "RaceThirdParty.h"
+RACE_MUJOCO_INCLUDES_START
 #include "MuJoCo/Components/Bodies/MjBody.h"
 #include "MuJoCo/Core/AMjManager.h"
 #include "MuJoCo/Core/MjPhysicsEngine.h"
 #include "MuJoCo/Core/MjRenderSnapshot.h"
 #include "MuJoCo/Utils/MjUtils.h"
+RACE_MUJOCO_INCLUDES_END
 #include "RacerController.h"
 #include "RaceNames.h"
 

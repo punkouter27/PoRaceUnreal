@@ -7,10 +7,13 @@
 #include "Components/PrimitiveComponent.h"
 #include "EngineUtils.h"
 #include "Kismet/GameplayStatics.h"
+#include "RaceThirdParty.h"
+RACE_MUJOCO_INCLUDES_START
 #include "MuJoCo/Components/Bodies/MjBody.h"
 #include "MuJoCo/Core/AMjManager.h"
 #include "MuJoCo/Core/MjPhysicsEngine.h"
 #include "MuJoCo/Utils/MjUtils.h"
+RACE_MUJOCO_INCLUDES_END
 #include "RaceNames.h"
 #include "RaceRegistry.h"
 #include "InputCoreTypes.h"

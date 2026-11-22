@@ -3,7 +3,10 @@
 #include "CoreMinimal.h"
 #include <atomic>
 #include "GameFramework/GameModeBase.h"
+#include "RaceThirdParty.h"
+RACE_MUJOCO_INCLUDES_START
 #include "MuJoCo/Components/Controllers/MjArticulationController.h"
+RACE_MUJOCO_INCLUDES_END
 #include "RaceRules.h"
 #include "RacerController.generated.h"
 

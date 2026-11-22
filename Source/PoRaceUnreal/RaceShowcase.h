@@ -10,6 +10,8 @@
 //   -ShowcaseTouch            show the touch corner button on desktop
 //   -ShowcaseIdle=<seconds>   override the idle threshold
 //   -ShowcaseCapture=<dir>    self-capture: overlay_on, overlay_off, demo_a, demo_b screenshots into <dir>, then quit
+//   -ShowcaseBench            run the overlay's sim benchmark once, 3 s after start, and log the result
+//   -NoDemo                   never start demo mode (implied by -RaceUiTest, so demo mode cannot take over a UI test)
 #pragma once
 
 #include "CoreMinimal.h"
@@ -34,6 +36,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Demo", meta = (ClampMin = "5.0"))
 	float IdleSeconds = 30.f;
 
+	/** Frames longer than this (level loads, shader compiles, a stalled window) do not count toward the idle time. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Demo", meta = (ClampMin = "0.05", ClampMax = "2.0"))
+	float MaxIdleFrameSeconds = 0.25f;
+
 	/** Seconds each showcase camera is held while demo mode runs. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Demo", meta = (ClampMin = "2.0"))
 	float CameraDwellSeconds = 7.f;
@@ -49,6 +55,13 @@ public:
 	/** Inference latency is shown as the rolling mean of this many samples. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Overlay", meta = (ClampMin = "1", ClampMax = "600"))
 	int32 LatencyWindow = 60;
+
+	/** Upper bounds on the overlay's sim benchmark: it stops after this many MuJoCo steps or this many seconds. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Overlay", meta = (ClampMin = "100", ClampMax = "200000"))
+	int32 BenchmarkMaxSteps = 20000;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Overlay", meta = (ClampMin = "0.1", ClampMax = "5.0"))
+	float BenchmarkMaxSeconds = 1.0f;
 
 	/** Show the 44 px corner button that toggles the overlay on touch devices. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Overlay")
@@ -102,6 +115,11 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Showcase") float GetMeanInferenceMs() const;
 	/** Starts demo mode now (e.g. a level opened by demo mode keeps showing it). */
 	UFUNCTION(BlueprintCallable, Category = "Showcase") void StartDemo() { IdleTime = IdleThreshold; SetDemoActive(true); }
+	/** Training-speed benchmark: steps a private copy of the loaded MuJoCo model (one environment, no rendering, no
+	 *  policy) on this CPU for a bounded time and reports simulation steps per second. Returns the result line. */
+	UFUNCTION(BlueprintCallable, Category = "Showcase") FString RunSimBenchmark();
+	UFUNCTION(BlueprintPure, Category = "Showcase") FString GetBenchmarkResult() const { return BenchmarkResult; }
+	UFUNCTION(BlueprintPure, Category = "Showcase") bool IsDemoDisabled() const { return bDemoDisabled; }
 	/** Any real input: leaves demo mode and restarts the idle timer. */
 	void NotifyUserInput();
 
@@ -138,6 +156,10 @@ private:
 	bool bOverlayVisible = false;
 	bool bDemoActive = false;
 	bool bTouchButton = false;
+	bool bDemoDisabled = false;
+	bool bBenchOnStart = false;
+	float MaxIdleFrame = 0.25f;
+	FString BenchmarkResult;
 	float IdleTime = 0.f;
 	float IdleThreshold = 30.f;
 	float CameraTime = 0.f;

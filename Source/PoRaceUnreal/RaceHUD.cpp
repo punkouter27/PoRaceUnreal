@@ -14,8 +14,11 @@
 #include "Misc/CommandLine.h"
 #include "Misc/ConfigCacheIni.h"
 #include "Misc/Parse.h"
+#include "RaceThirdParty.h"
+RACE_MUJOCO_INCLUDES_START
 #include "MuJoCo/Core/AMjManager.h"
 #include "MuJoCo/Core/MjPhysicsEngine.h"
+RACE_MUJOCO_INCLUDES_END
 #include "RaceGameInstance.h"
 #include "RaceDirector.h"
 #include "RaceNames.h"
@@ -193,7 +196,7 @@ void ARaceHUD::DrawHUD()
 		if (PC->WasInputKeyJustPressed(EKeys::R) && Controller.IsValid()) Controller->RequestRestart();
 	}
 
-	if (bTelemetryVisible)
+	if (bTelemetryVisible)	// portrait: one line above the rates, which sit bottom centre there
 	{
 		const double LeadDist = Race.Rows.Num() > 0 ? Race.Rows[0].Distance : 0.0;
 		const int32 PolIdx = Controller.IsValid() ? Controller->GetPolicyOverride() : 0;
@@ -202,7 +205,7 @@ void ARaceHUD::DrawHUD()
 		                            : PolIdx == 1 ? FLinearColor(1.f, 0.25f, 0.20f)
 		                            : FLinearColor(0.20f, 0.50f, 1.f);
 		Text(FString::Printf(TEXT("Policy: %s  |  Reward~ %.1f  |  NaN/Inf: %d"), PolLabel, LeadDist, Race.NanInfCount),
-			Pad, H - Pad - 20.f * S, Race.NanInfCount > 0 ? FLinearColor(1.f, 0.25f, 0.20f) : PolColor, 12.f * S, false, false, TEXT("BL"));
+			Pad, bPortrait ? H - Pad - 40.f * S : H - Pad - 20.f * S, Race.NanInfCount > 0 ? FLinearColor(1.f, 0.25f, 0.20f) : PolColor, 12.f * S, false, false, TEXT("BL"));
 	}
 
 	// top left: track and lap, then the standings and the race clock

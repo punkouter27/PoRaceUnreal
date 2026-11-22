@@ -6,7 +6,10 @@
 #include "Dom/JsonObject.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
+#include "RaceThirdParty.h"
+RACE_MUJOCO_INCLUDES_START
 #include "MuJoCo/Utils/MjUtils.h"
+RACE_MUJOCO_INCLUDES_END
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 

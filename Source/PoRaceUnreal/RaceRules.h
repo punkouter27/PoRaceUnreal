@@ -6,7 +6,10 @@
 // audit. The pure pieces (FYellowFlag, Tactic) are also driven without physics by SelfTest (training/selftest.py).
 
 #include "CoreMinimal.h"
+#include "RaceThirdParty.h"
+RACE_MUJOCO_INCLUDES_START
 #include <mujoco/mujoco.h>
+RACE_MUJOCO_INCLUDES_END
 #include "RaceTrack.h"
 #include "RaceContract.gen.h"
 #include "Racer.h"

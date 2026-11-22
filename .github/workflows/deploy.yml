@@ -1,9 +1,10 @@
 name: Test & Deploy Showcase
 
 # The one workflow. Push to master: Python checks (ruff, pytest) -> build the showcase site (web/build.py) -> deploy it
-# to the Azure Static Web App swa-poraceunreal (resource group PoShared) -> check / and /diag live.
-# Pull requests get the checks and the build, never a deploy. The Unreal project is built locally (GitHub's runners
-# have no Unreal Engine); it compiles from a fresh clone because URLab is vendored in Plugins/.
+# to the Azure Static Web App swa-poraceunreal (resource group PoShared) -> check / and /diag live, and that the
+# X-Commit header on / is this commit. Pull requests get the checks and the build, never a deploy. The Unreal project
+# is built locally (GitHub's runners have no Unreal Engine); URLab is not tracked: scripts/setup_urlab.ps1 clones,
+# patches and builds it into Plugins/.
 #
 # Repo secret: AZURE_STATIC_WEB_APPS_API_TOKEN (the Static Web App's deployment token).
 on:
@@ -84,12 +85,13 @@ jobs:
           VERSION: ${{ steps.build.outputs.version }}
         run: |
           for i in $(seq 1 20); do
-            if curl -fsS --max-time 30 "$URL/version.json" | grep -q "\"$VERSION\"" \
+            if curl -fsSI --max-time 30 "$URL/" | tr -d '\r' | grep -qi "^x-commit: $GITHUB_SHA$" \
+              && curl -fsS --max-time 30 "$URL/version.json" | grep -q "\"$VERSION\"" \
               && curl -fsS --max-time 30 "$URL/" | grep -q "PoRace" \
               && curl -fsS --max-time 30 "$URL/diag" | grep -q "<title>System status</title>" \
               && curl -fsS --max-time 30 "$URL/diag_checks.json" | grep -q '"checks"'; then
-              echo "Live: $URL ($VERSION), / and /diag served"; exit 0
+              echo "Live: $URL ($VERSION, X-Commit $GITHUB_SHA), / and /diag served"; exit 0
             fi
             sleep 15
           done
-          echo "$URL did not serve $VERSION on / and /diag"; exit 1
+          echo "$URL did not serve $VERSION with X-Commit $GITHUB_SHA on / and /diag"; exit 1

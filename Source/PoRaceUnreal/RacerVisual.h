@@ -34,6 +34,21 @@ public:
 	UPROPERTY(EditAnywhere, Category = "PoRace")
 	double PelvisRestZ = 0.96675;
 
+	/** Gaze (drawing only, the physics has no neck joint): the Head bone turns toward the nearest rival ahead within
+	 *  GazeRange, else straight ahead, at most GazeMaxDegrees off the torso's facing, eased at GazeSpeed per second. */
+	UPROPERTY(EditAnywhere, Category = "PoRace|Gaze", meta = (ClampMin = "0", ClampMax = "90"))
+	float GazeMaxDegrees = 60.f;
+
+	UPROPERTY(EditAnywhere, Category = "PoRace|Gaze", meta = (ClampMin = "0"))
+	float GazeRange = 800.f;	// cm
+
+	UPROPERTY(EditAnywhere, Category = "PoRace|Gaze", meta = (ClampMin = "0.1"))
+	float GazeSpeed = 4.f;
+
+	/** The MuJoCo body the head currently looks at (-1 = straight ahead) and the head's turn off the torso, degrees. */
+	int32 GetGazeTarget() const { return GazeTarget; }
+	float GetGazeDegrees() const { return FMath::RadiansToDegrees(GazeDelta.GetAngle()); }
+
 	virtual void Tick(float DeltaSeconds) override;
 
 private:
@@ -43,7 +58,10 @@ private:
 	TArray<int32> RefToDriven;		// reference-skeleton index -> driven index, or INDEX_NONE
 	TArray<int32> BodyIds;			// per driven bone
 	TArray<FQuat> Offsets;			// per driven bone: rest world rotation relative to its body's rest rotation
-	int32 HipsRef = INDEX_NONE, PelvisBody = -1, RootBody = -1;
+	int32 HipsRef = INDEX_NONE, HeadRef = INDEX_NONE, PelvisBody = -1, RootBody = -1;
+	int32 GazeTarget = -1;
+	FQuat GazeDelta = FQuat::Identity;	// world-space turn applied to the Head bone on top of the torso's rotation
+	void ApplyGaze(const struct FMjRenderSnapshot& S, const struct mjModel_* m, const FTransform& ToComponent, float DeltaSeconds);
 	FVector HipsOffset = FVector::ZeroVector;	// the Hips bone from the pelvis body, in the pelvis frame (cm)
 	TArray<FTransform> RefLocal, CompSpace;
 	TArray<FVector> RestScale;		// per reference bone: its rest scale in component space

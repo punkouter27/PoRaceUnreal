@@ -4,11 +4,14 @@
 #include "Components/PoseableMeshComponent.h"
 #include "Engine/SkeletalMesh.h"
 #include "EngineUtils.h"
+#include "RaceThirdParty.h"
+RACE_MUJOCO_INCLUDES_START
 #include "MuJoCo/Components/Bodies/MjBody.h"
 #include "MuJoCo/Core/AMjManager.h"
 #include "MuJoCo/Core/MjPhysicsEngine.h"
 #include "MuJoCo/Core/MjRenderSnapshot.h"
 #include "MuJoCo/Utils/MjUtils.h"
+RACE_MUJOCO_INCLUDES_END
 #include "RacerController.h"
 #include "RaceNames.h"
 
@@ -77,6 +80,7 @@ bool ARacerVisual::Init()
 		BodyIds.Add(b);
 		Anchor.Add(Pair[0], { CS[i].GetLocation(), MjUtils::MjToUEPosition(d->xpos + 3 * b) - Pelvis0 });
 		if (FString(Pair[0]) == TEXT("Hips")) HipsRef = i;
+		if (FString(Pair[0]) == TEXT("Head")) HeadRef = i;
 	}
 	TArray<FQuat> BodyRest;
 	for (const int32 b : BodyIds) BodyRest.Add(MjUtils::MjToUERotation(d->xquat + 4 * b));
@@ -149,6 +153,7 @@ void ARacerVisual::Tick(float DeltaSeconds)
 	const FReferenceSkeleton& Ref = Mesh->GetSkinnedAsset()->GetRefSkeleton();
 	TArray<FTransform>& Local = Mesh->BoneSpaceTransforms;
 	bool bPosed = false;
+	const mjModel* Model = Manager->PhysicsEngine->GetModel();
 	Manager->PhysicsEngine->WithRenderState([&](const FMjRenderSnapshot& S)
 	{
 		if (S.XPos.Num() < 3 * (PelvisBody + 1)) return;
@@ -175,9 +180,17 @@ void ARacerVisual::Tick(float DeltaSeconds)
 			CompSpace[i] = FTransform(ToComponent.GetRotation() * World, Loc, RestScale[i]);
 			Local[i] = P == INDEX_NONE ? CompSpace[i] : CompSpace[i].GetRelativeTransform(CompSpace[P]);
 		}
+		ApplyGaze(S, Model, ToComponent, DeltaSeconds);
 		bPosed = true;
 	});
 	if (bPosed) Mesh->MarkRefreshTransformDirty();
+	if (bPosed && (Frames + 1) % 600 == 120)	// every 10 s from 2 s in: what the render-only gaze is doing
+	{
+		const mjModel* m = Manager->PhysicsEngine->GetModel();
+		const char* Target = GazeTarget >= 0 && m ? mj_id2name(m, mjOBJ_BODY, GazeTarget) : nullptr;
+		UE_LOG(LogRace, Log, TEXT("racer visual %s: gaze target %s, head turned %.1f deg off the torso (max %.0f)"), *Prefix,
+			Target ? *FString(UTF8_TO_TCHAR(Target)) : TEXT("ahead"), GetGazeDegrees(), GazeMaxDegrees);
+	}
 	if (bPosed && ++Frames == 120)	// one look at what the skin is doing, two seconds in
 	{
 		const mjModel* m = Manager->PhysicsEngine->GetModel();
@@ -189,4 +202,48 @@ void ARacerVisual::Tick(float DeltaSeconds)
 			Mesh->IsVisible(), Mesh->bHiddenInGame, *GetNameSafe(Mesh->GetSkinnedAsset()), *GetNameSafe(Mesh->GetMaterial(0)),
 			Mesh->GetSkinnedAsset() ? Mesh->GetSkinnedAsset()->GetLODNum() : -1);
 	}
+}
+
+void ARacerVisual::ApplyGaze(const FMjRenderSnapshot& S, const mjModel* m, const FTransform& ToComponent, float DeltaSeconds)
+{
+	// Render-only gaze: MuJoCo has no neck joint for this racer, so the Head bone (riding the torso body) is turned
+	// toward the nearest rival ahead. Nothing here touches the simulation.
+	if (!m || HeadRef == INDEX_NONE || !CompSpace.IsValidIndex(HeadRef)) return;
+	const int32 k = RefToDriven[HeadRef];
+	if (k == INDEX_NONE || S.XQuat.Num() < 4 * (BodyIds[k] + 1)) return;
+	const FTransform ToWorld = ToComponent.Inverse();
+	const FVector HeadWorld = ToWorld.TransformPosition(CompSpace[HeadRef].GetLocation());
+	const FVector Facing = MjUtils::MjToUERotation(&S.XQuat[4 * BodyIds[k]]).RotateVector(FVector::ForwardVector).GetSafeNormal();
+	if (Facing.IsNearlyZero()) return;
+
+	// nearest other racer (a free root body) in front of the torso and within range
+	GazeTarget = -1;
+	double Best = FMath::Square(static_cast<double>(GazeRange));
+	FVector Look = Facing;
+	for (int32 b = 1; b < m->nbody && 3 * b + 2 < S.XPos.Num(); ++b)
+	{
+		if (m->body_parentid[b] != 0 || b == RootBody || m->body_jntnum[b] == 0) continue;
+		const FVector To = MjUtils::MjToUEPosition(&S.XPos[3 * b]) - HeadWorld;
+		const double D2 = To.SizeSquared();
+		if (D2 < Best && D2 > 1.0 && FVector::DotProduct(To.GetSafeNormal(), Facing) > 0.2)
+		{
+			Best = D2;
+			GazeTarget = b;
+			Look = To.GetSafeNormal();
+		}
+	}
+	FQuat Want = FQuat::FindBetweenNormals(Facing, Look);
+	FVector Axis;
+	float Angle;
+	Want.ToAxisAndAngle(Axis, Angle);
+	const float MaxRad = FMath::DegreesToRadians(GazeMaxDegrees);
+	if (Angle > MaxRad) Want = FQuat(Axis, MaxRad);
+	GazeDelta = FQuat::Slerp(GazeDelta, Want, FMath::Clamp(DeltaSeconds * GazeSpeed, 0.f, 1.f)).GetNormalized();
+
+	const FQuat C = ToComponent.GetRotation();
+	FTransform& Head = CompSpace[HeadRef];
+	Head.SetRotation((C * GazeDelta * C.Inverse() * Head.GetRotation()).GetNormalized());
+	TArray<FTransform>& Local = Mesh->BoneSpaceTransforms;
+	const int32 P = Mesh->GetSkinnedAsset()->GetRefSkeleton().GetParentIndex(HeadRef);
+	Local[HeadRef] = P == INDEX_NONE ? Head : Head.GetRelativeTransform(CompSpace[P]);
 }

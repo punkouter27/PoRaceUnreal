@@ -79,5 +79,10 @@ h2 { font-size: 20px; margin: 32px 0 12px; }
 .pill[data-s="Healthy"] { border-color: var(--ok); color: var(--ok); }
 .pill[data-s="Degraded"] { border-color: var(--warn); color: var(--warn); }
 .pill[data-s="Unhealthy"] { border-color: var(--bad); color: var(--bad); }
-.pill[data-s="Checking"], .pill[data-s="Not used"] { color: var(--muted); }
+.pill[data-s="Checking"], .pill[data-s="Off"] { color: var(--muted); }
+
+/* Phones: the version stamp follows the page content instead of sitting over it. */
+@media (max-width: 600px) {
+  .foot { position: static; }
+}
 .meta { color: var(--muted); font-size: 14px; }

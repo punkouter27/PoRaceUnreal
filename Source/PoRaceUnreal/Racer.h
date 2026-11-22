@@ -6,7 +6,10 @@
 
 #include "CoreMinimal.h"
 #include <atomic>
+#include "RaceThirdParty.h"
+RACE_MUJOCO_INCLUDES_START
 #include <mujoco/mujoco.h>
+RACE_MUJOCO_INCLUDES_END
 
 class UNNEModelData;
 namespace UE::NNE { class IModelInstanceCPU; }

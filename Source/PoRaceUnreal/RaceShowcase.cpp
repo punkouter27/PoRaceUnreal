@@ -12,11 +12,17 @@
 #include "Misc/CommandLine.h"
 #include "Misc/Paths.h"
 #include "Misc/Parse.h"
+#include "RaceThirdParty.h"
+RACE_MUJOCO_INCLUDES_START
+#include "MuJoCo/Core/AMjManager.h"
+#include "MuJoCo/Core/MjPhysicsEngine.h"
+RACE_MUJOCO_INCLUDES_END
 #include "Styling/CoreStyle.h"
 #include "UnrealClient.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
+#include "Widgets/SBoxPanel.h"
 #include "Widgets/SOverlay.h"
 #include "Widgets/Text/STextBlock.h"
 
@@ -32,6 +38,7 @@ namespace RaceShowcaseUi
 	static FLinearColor Text() { return Hex(TEXT("e6e9f2")); }
 	static FLinearColor Muted() { return Hex(TEXT("9aa3b5")); }
 	static FLinearColor Accent() { return Hex(TEXT("6366f1")); }
+	static FLinearColor Line() { return Hex(TEXT("263049")); }
 }
 
 // ------------------------------------------------------------------------------------------------------------
@@ -143,6 +150,10 @@ void URaceShowcaseSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 	IdleThreshold = Cfg->IdleSeconds;
 	FParse::Value(FCommandLine::Get(), TEXT("ShowcaseIdle="), IdleThreshold);
 	IdleThreshold = FMath::Max(1.f, IdleThreshold);
+	MaxIdleFrame = FMath::Max(0.05f, Cfg->MaxIdleFrameSeconds);
+	// a UI test must see the HUD it checks: demo mode never starts under -RaceUiTest (or -NoDemo)
+	bDemoDisabled = FParse::Param(FCommandLine::Get(), TEXT("NoDemo")) || FParse::Param(FCommandLine::Get(), TEXT("RaceUiTest"));
+	bBenchOnStart = FParse::Param(FCommandLine::Get(), TEXT("ShowcaseBench"));
 	LatencySamples.Reset();
 	bOverlayVisible = FParse::Param(FCommandLine::Get(), TEXT("DiagOverlay"));
 	bTouchButton = Cfg->bTouchCornerButton
@@ -159,8 +170,9 @@ void URaceShowcaseSubsystem::OnWorldBeginPlay(UWorld& InWorld)
 	Input = MakeShared<FRaceShowcaseInput>(this, Cfg->OverlayKey);
 	FSlateApplication::Get().RegisterInputPreProcessor(Input);
 	AddWidgets();
-	UE_LOG(LogRaceShowcase, Log, TEXT("Showcase: overlay key %s, demo after %.0f s idle, %d demo cameras, touch button %s%s"),
-		*Cfg->OverlayKey.ToString(), IdleThreshold, Cfg->DemoCameras.Num(), bTouchButton ? TEXT("on") : TEXT("off"),
+	UE_LOG(LogRaceShowcase, Log, TEXT("Showcase: overlay key %s, demo %s, %d demo cameras, touch button %s%s"),
+		*Cfg->OverlayKey.ToString(), bDemoDisabled ? TEXT("disabled (-NoDemo / -RaceUiTest)") : *FString::Printf(TEXT("after %.0f s idle"), IdleThreshold),
+		Cfg->DemoCameras.Num(), bTouchButton ? TEXT("on") : TEXT("off"),
 		CaptureDir.IsEmpty() ? TEXT("") : *FString::Printf(TEXT(", capturing to %s"), *CaptureDir));
 }
 
@@ -189,12 +201,34 @@ void URaceShowcaseSubsystem::AddWidgets()
 
 	OverlayWidget = SNew(SBox)
 		.HAlign(HAlign_Left).VAlign(VAlign_Top).Padding(FMargin(16.f, 64.f, 16.f, 16.f))
-		.Visibility_Lambda([Weak] { return Weak.IsValid() && Weak->IsOverlayVisible() && !Weak->IsDemoActive() ? EVisibility::HitTestInvisible : EVisibility::Collapsed; })
+		.Visibility_Lambda([Weak] { return Weak.IsValid() && Weak->IsOverlayVisible() && !Weak->IsDemoActive() ? EVisibility::SelfHitTestInvisible : EVisibility::Collapsed; })
 		[
 			SNew(SBorder).BorderImage(White).BorderBackgroundColor(RaceShowcaseUi::Surface()).Padding(FMargin(14.f, 10.f))
 			[
-				SNew(STextBlock).Font(Mono).ColorAndOpacity(RaceShowcaseUi::Text())
-				.Text_Lambda([Weak] { return Weak.IsValid() ? FText::FromString(Weak->BuildOverlayText()) : FText::GetEmpty(); })
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot().AutoHeight()
+				[
+					SNew(STextBlock).Font(Mono).ColorAndOpacity(RaceShowcaseUi::Text())
+					.Text_Lambda([Weak] { return Weak.IsValid() ? FText::FromString(Weak->BuildOverlayText()) : FText::GetEmpty(); })
+				]
+				+ SVerticalBox::Slot().AutoHeight().HAlign(HAlign_Left).Padding(FMargin(0.f, 8.f, 0.f, 0.f))
+				[
+					SNew(SButton)
+					.ButtonStyle(&FCoreStyle::Get().GetWidgetStyle<FButtonStyle>("NoBorder"))
+					.ContentPadding(FMargin(0.f))
+					.ToolTipText(NSLOCTEXT("RaceShowcase", "BenchTip", "Steps a copy of the loaded MuJoCo scene on this CPU for up to a second and shows simulation steps per second"))
+					.OnClicked_Lambda([Weak] { if (Weak.IsValid()) Weak->RunSimBenchmark(); return FReply::Handled(); })
+					[
+						SNew(SBox).MinDesiredHeight(44.f).VAlign(VAlign_Center)
+						[
+							SNew(SBorder).BorderImage(White).BorderBackgroundColor(RaceShowcaseUi::Line()).Padding(FMargin(12.f, 6.f)).VAlign(VAlign_Center)
+							[
+								SNew(STextBlock).Font(Body).ColorAndOpacity(RaceShowcaseUi::Text())
+								.Text(NSLOCTEXT("RaceShowcase", "BenchButton", "Benchmark training speed (sim steps/s)"))
+							]
+						]
+					]
+				]
 			]
 		];
 	VC->AddViewportWidgetContent(OverlayWidget.ToSharedRef(), 1000);
@@ -281,17 +315,64 @@ float URaceShowcaseSubsystem::GetMeanInferenceMs() const
 
 FString URaceShowcaseSubsystem::BuildOverlayText() const
 {
+	// two columns, the values start at column 19; a long value continues on the next line, indented, so the panel
+	// stays narrow enough for a portrait phone
+	const TCHAR* Indent = TEXT("\n                   ");
 	const URaceShowcaseConfig* Cfg = URaceShowcaseSettings::GetShowcaseConfig();
 	const float Lat = GetMeanInferenceMs();
-	FString Out = FString::Printf(TEXT("DIAGNOSTICS              [%s]\n"), *Cfg->OverlayKey.GetDisplayName().ToString());
-	Out += FString::Printf(TEXT("FPS                      %.1f\n"), Fps);
-	const FString Note = RewardNote.IsEmpty() ? FString() : FString::Printf(TEXT("  (%s)"), *RewardNote);
-	Out += bHaveReward ? FString::Printf(TEXT("Episode reward           %.2f%s\n"), EpisodeReward, *Note) : FString(TEXT("Episode reward           n/a\n"));
-	Out += Lat >= 0.f ? FString::Printf(TEXT("Inference latency        %.2f ms (mean of %d)\n"), Lat, LatencySamples.Num())
-	                  : FString(TEXT("Inference latency        n/a (no policy step yet)\n"));
-	Out += FString::Printf(TEXT("Curriculum stage         %s\n"), CurriculumStage.IsEmpty() ? TEXT("n/a") : *CurriculumStage);
-	Out += FString::Printf(TEXT("Demo mode                after %.0f s idle (idle %.0f s)"), IdleThreshold, IdleTime);
+	FString Out = FString::Printf(TEXT("DIAGNOSTICS        [%s]\n"), *Cfg->OverlayKey.GetDisplayName().ToString());
+	Out += FString::Printf(TEXT("FPS                %.1f\n"), Fps);
+	const FString Note = RewardNote.IsEmpty() ? FString() : FString(Indent) + RewardNote;
+	Out += bHaveReward ? FString::Printf(TEXT("Episode reward     %.2f%s\n"), EpisodeReward, *Note) : FString(TEXT("Episode reward     n/a\n"));
+	Out += Lat >= 0.f ? FString::Printf(TEXT("Inference latency  %.2f ms (mean of %d)\n"), Lat, LatencySamples.Num())
+	                  : FString(TEXT("Inference latency  n/a (no policy step yet)\n"));
+	Out += FString::Printf(TEXT("Curriculum stage   %s\n"), CurriculumStage.IsEmpty() ? TEXT("n/a") : *CurriculumStage);
+	Out += bDemoDisabled ? FString(TEXT("Demo mode          off (UI test / -NoDemo)"))
+	                     : FString::Printf(TEXT("Demo mode          after %.0f s idle (idle %.0f s)"), IdleThreshold, IdleTime);
+	Out += FString::Printf(TEXT("\nSim benchmark      %s"), BenchmarkResult.IsEmpty() ? TEXT("not run (button below)") : *BenchmarkResult);
 	return Out;
+}
+
+FString URaceShowcaseSubsystem::RunSimBenchmark()
+{
+	// "Training speed" here = how fast this CPU steps the race's own MuJoCo model, which bounds a CPU rollout. It is
+	// NOT the GPU (MJX / Brax) trainer's throughput and runs no policy; the result line says exactly that.
+	AAMjManager* Mgr = AAMjManager::Instance;
+	const mjModel* Live = Mgr && Mgr->PhysicsEngine ? Mgr->PhysicsEngine->GetModel() : nullptr;
+	if (!Live)
+	{
+		BenchmarkResult = TEXT("n/a (no MuJoCo scene loaded)");
+		UE_LOG(LogRaceShowcase, Display, TEXT("Showcase: benchmark %s"), *BenchmarkResult);
+		return BenchmarkResult;
+	}
+	const URaceShowcaseConfig* Cfg = URaceShowcaseSettings::GetShowcaseConfig();
+	const int32 MaxSteps = FMath::Clamp(Cfg->BenchmarkMaxSteps, 100, 200000);
+	const double MaxSeconds = FMath::Clamp(static_cast<double>(Cfg->BenchmarkMaxSeconds), 0.1, 5.0);
+	mjModel* M = mj_copyModel(nullptr, Live);	// private copy: the live simulation is not touched
+	mjData* D = M ? mj_makeData(M) : nullptr;
+	if (!D)
+	{
+		if (M) mj_deleteModel(M);
+		BenchmarkResult = TEXT("n/a (could not copy the MuJoCo model)");
+		return BenchmarkResult;
+	}
+	mj_forward(M, D);
+	const double T0 = FPlatformTime::Seconds();
+	int32 Steps = 0;
+	double Elapsed = 0.0;
+	while (Steps < MaxSteps && Elapsed < MaxSeconds)
+	{
+		for (int32 i = 0; i < 50 && Steps < MaxSteps; ++i, ++Steps) mj_step(M, D);
+		Elapsed = FPlatformTime::Seconds() - T0;
+	}
+	const double Sps = Elapsed > 0.0 ? Steps / Elapsed : 0.0;
+	const double Rt = Sps * M->opt.timestep;
+	BenchmarkResult = FString::Printf(TEXT("%.0f steps/s, %.0fx real time\n                   MuJoCo, 1 env, CPU, no policy"), Sps, Rt);
+	mj_deleteData(D);
+	mj_deleteModel(M);
+	UE_LOG(LogRaceShowcase, Display, TEXT("Showcase: benchmark %.0f MuJoCo steps/s, %.0fx real time (1 env on this CPU, no policy; %d steps in %.2f s)"),
+		Sps, Rt, Steps, Elapsed);
+	return BenchmarkResult;
 }
 
 void URaceShowcaseSubsystem::SetOverlayVisible(bool bVisible)
@@ -326,8 +407,14 @@ void URaceShowcaseSubsystem::Tick(float DeltaTime)
 		const float Inst = 1.f / Dt;
 		Fps = Fps <= 0.f ? Inst : FMath::Lerp(Fps, Inst, 0.05f);
 	}
-	IdleTime += Dt;
-	if (!bDemoActive && IdleTime >= IdleThreshold) SetDemoActive(true);
+	// a long frame (level load, shader compile, stalled window) is not the player being idle
+	if (Dt <= MaxIdleFrame) IdleTime += Dt;
+	if (!bDemoActive && !bDemoDisabled && IdleTime >= IdleThreshold) SetDemoActive(true);
+	if (bBenchOnStart && IdleTime > 3.f)
+	{
+		bBenchOnStart = false;
+		RunSimBenchmark();
+	}
 	if (bDemoActive)
 	{
 		const URaceShowcaseConfig* Cfg = URaceShowcaseSettings::GetShowcaseConfig();

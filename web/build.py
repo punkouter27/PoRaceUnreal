@@ -22,7 +22,7 @@ from pathlib import Path
 
 WEB = Path(__file__).resolve().parent
 ROOT = WEB.parent
-STATIC = ["style.css", "diag.js", "staticwebapp.config.json"]
+STATIC = ["style.css", "diag.js"]
 GROUPS = ("api", "data", "service")
 KINDS = ("files", "version", "none")
 
@@ -120,6 +120,10 @@ def build(dist: Path) -> str:
         shots.append({"url": f"screenshots/{src.name}", "caption": s["caption"], "width": w, "height": h})
     for name in STATIC:
         shutil.copyfile(WEB / name, dist / name)
+    # X-Commit on every response: the workflow (and anyone) can confirm which commit is live.
+    swa = json.loads((WEB / "staticwebapp.config.json").read_text(encoding="utf-8"))
+    swa.setdefault("globalHeaders", {})["x-commit"] = commit or "unknown"
+    (dist / "staticwebapp.config.json").write_text(json.dumps(swa, indent=1) + "\n", encoding="utf-8")
     for name in site.get("extra_files", []):
         shutil.copyfile(ROOT / name, dist / Path(name).name)
     subs = {

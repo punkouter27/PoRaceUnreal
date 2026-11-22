@@ -6,7 +6,10 @@
 // training/build_track_model.py for a track) carry the exact numbers; these write them back.
 
 #include "CoreMinimal.h"
+#include "RaceThirdParty.h"
+RACE_MUJOCO_INCLUDES_START
 #include <mujoco/mujoco.h>
+RACE_MUJOCO_INCLUDES_END
 
 class FJsonObject;
 

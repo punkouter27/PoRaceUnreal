@@ -10,13 +10,14 @@ physics authority; Unreal renders and presents the simulation. Read `docs/spec.m
 | Path | What |
 |---|---|
 | `Source/PoRaceUnreal/` | Game module (C++): race director, racers, HUD (`RaceHUD*.cpp`), theme tokens (`UiTheme.h`) |
-| `Plugins/UnrealRoboticsLab/` | URLab (MuJoCo in Unreal), vendored at a pinned commit with this repo's patch applied |
+| `Plugins/UnrealRoboticsLab/` | URLab (MuJoCo in Unreal): NOT tracked (git-ignored, owner decision ca8af3d); `scripts/setup_urlab.ps1` clones upstream at a pinned commit, applies `Plugins/urlab_porace.patch` and builds its third-party libs |
 | `training/` | Brax / mujoco_playground PPO trainer, contracts (`contract.py`), reward weights (`reward_config.json`) |
 | `tests/` | pytest suite (`pytest` from the repo root) |
-| `scripts/` | Unreal editor Python (`build_track.py`, ...), `regress.ps1`, `verify_all.ps1`, `setup_urlab.ps1` (editor-Python packages for the vendored URLab) |
+| `scripts/` | Unreal editor Python (`build_track.py`, ...), `regress.ps1`, `verify_all.ps1`, `setup_urlab.ps1` (clone + patch + build URLab, editor-Python packages) |
 | `tools/` | Blender / Android / maintenance helpers |
 | `web/` | Static showcase site + `/diag`, built by `web/build.py`, deployed to `swa-poraceunreal` |
 | `docs/` | Spec, PRD, plan / todo (`docs/tasks/`), slice reports, proposals |
+| `Content/Project/` | Unreal assets (`/Game/Project/...`): `Agents/Racers`, `Environments/{Levels,Tracks,MuJoCoImports}`, `RL_Policies/Brains`, `DataAssets` (`DA_RaceRewardConfig`, `DA_RaceShowcaseConfig`, picked in `Config/DefaultGame.ini`). No `Core`/`UI` assets: the HUD and overlay are C++ Slate. `Content/Art/` holds raw source files (fbx/png/blend), not assets |
 
 ## Project contracts
 
@@ -50,8 +51,55 @@ physics authority; Unreal renders and presents the simulation. Read `docs/spec.m
 - `.github/workflows/deploy.yml` (the only workflow): on push to `master` it runs the Python checks (ruff, pytest),
   builds the showcase site (`web/build.py`), deploys it to the Azure Static Web App `swa-poraceunreal`
   (resource group `PoShared`, secret `AZURE_STATIC_WEB_APPS_API_TOKEN`) and checks `/` and `/diag` live.
-- The Unreal project is built and tested locally (GitHub's runners have no Unreal Engine). It compiles from a fresh
-  clone because URLab is vendored in `Plugins/`.
+- The workflow confirms the deploy by the `X-Commit` header on `/` (written by `web/build.py` into the Static Web App
+  config) matching the pushed commit, plus `version.json`, `/` and `/diag`.
+- The Unreal project is built and tested locally (GitHub's runners have no Unreal Engine). After a fresh clone run
+  `scripts/setup_urlab.ps1` first (URLab is not tracked; see the repo map). This deviates from the standard below
+  ("vendored INSIDE this repo") by the owner's decision in ca8af3d.
+
+## Coding standard
+
+- C++ (`Source/PoRaceUnreal/`): Unreal conventions (tabs, `F`/`U`/`A` prefixes, `UPROPERTY` for anything a designer
+  tunes). The game module builds with 0 warnings. Tunables go in DataAssets / `UDeveloperSettings`, never literals
+  scattered through gameplay code. Chaos never simulates racers or track elements.
+- Python: `ruff check` + `ruff format` clean (config in `pyproject.toml`, line length 120, py311). Tests are real
+  pytest tests under `tests/` and never write into tracked files.
+- Assets live under `/Game/Project/...` and are moved or renamed ONLY through the editor (AssetTools rename + fix up
+  redirectors), never with git or the file system. URLab's importer always writes to `/Game/MuJoCoImports`: after a
+  re-import (`scripts/build_track.py`) move the new meshes to `/Game/Project/Environments/MuJoCoImports` in the editor.
+- Web (`web/`): plain HTML/CSS/JS, the Po tokens in `style.css`, text >= 4.5:1. Version stamp from `web/build.py` only.
+
+## Concurrent work
+
+- One game engine or headless browser at a time on this machine: never run two UnrealEditor / UnrealEditor-Cmd
+  processes (they share `Intermediate/`, `Saved/` and DerivedDataCache) and close the editor before a command-line
+  build (`Build.bat` waits on the UBT mutex with `-WaitMutex`).
+- Other agents may be editing other Po repos: touch only this repo. Stage only the files you changed (`git add <paths>`),
+  never `git add -A`; leave unrelated local work alone; fetch and rebase your own unpushed commits before pushing.
+- Never run full test suites against the live site (a Free Static Web App): live checks are a handful of page loads.
+
+## Verify (exact commands)
+
+```powershell
+# Python (3.12 venv with the [dependency-groups] dev list from pyproject.toml)
+ruff check .
+ruff format --check .
+python -m pytest                       # 35 tests: contract, models, physics rules, reward terms, brains, race, web build
+python web/build.py --check
+
+# Unreal (Windows, UE 5.8 at C:\Program Files\Epic Games\UE_5.8)
+powershell -File scripts\setup_urlab.ps1          # once per clone: URLab clone + patch + third-party build
+& "C:\Program Files\Epic Games\UE_5.8\Engine\Build\BatchFiles\Build.bat" PoRaceUnrealEditor Win64 Development `
+    -Project="$PWD\PoRaceUnreal.uproject" -WaitMutex -NoHotReloadFromIDE     # 0 warnings in Source/PoRaceUnreal
+# Rendered UI test at 16:9 and 9:16 (needs a display; never -nullrhi). Demo mode is off under -RaceUiTest.
+& "C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe" "$PWD\PoRaceUnreal.uproject" -game -windowed `
+    -ResX=1280 -ResY=720 -ForceRes -unattended -nosplash -nosound -RaceUiTest -AutoStart=1 -RaceLimit=4 -stdout -FullStdOutLogOutput
+#   expect "RaceUiTest] done at the results card: 0 check failures"; repeat with -ResX=540 -ResY=1170
+# Overlay, benchmark and idle demo (docs/showcase.md): writes overlay_on/off, demo_a/b PNGs, logs the benchmark
+& "C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe" "$PWD\PoRaceUnreal.uproject" -game -windowed `
+    -ResX=1600 -ResY=900 -ShowcaseCapture=<dir> -ShowcaseTouch -ShowcaseBench -DiagOverlay -unattended -nosplash -nosound
+# Everything incl. the parity and regression gates: scripts\verify_all.ps1 -Unreal
+```
 
 ## Po Game Standard (Unity / Unreal RL games)
 

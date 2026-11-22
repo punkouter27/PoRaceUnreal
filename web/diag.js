@@ -125,7 +125,8 @@
       list.checks.map(async (c) => {
         const li = row(c);
         if (c.kind === "none") {
-          show(li, "Not used", null, c.detail);
+          // switched off on purpose: neutral "Off", never counted toward the banner
+          show(li, "Off", null, c.detail);
           return;
         }
         let r;
