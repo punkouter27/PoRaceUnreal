@@ -32,7 +32,9 @@ def test_articulated_physics_rules(fp):
     assert tuple(m.opt.gravity) == pytest.approx((0.0, 0.0, -9.81))
     assert not m.opt.disableflags & mujoco.mjtDisableBit.mjDSBL_FILTERPARENT
 
-    hinges = [j for j in range(m.njnt) if m.jnt_type[j] in (mujoco.mjtJoint.mjJNT_HINGE, mujoco.mjtJoint.mjJNT_SLIDE)]
+    # compare as int: enum == numpy int is False on Linux (CI) but True on Windows
+    limb_types = (int(mujoco.mjtJoint.mjJNT_HINGE), int(mujoco.mjtJoint.mjJNT_SLIDE))
+    hinges = [j for j in range(m.njnt) if int(m.jnt_type[j]) in limb_types]
     unlimited = {_name(m, mujoco.mjtObj.mjOBJ_JOINT, j) for j in hinges if not m.jnt_limited[j]}
     assert hinges and unlimited <= WHEELS, unlimited
 
