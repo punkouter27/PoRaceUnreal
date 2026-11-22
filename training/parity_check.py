@@ -43,7 +43,7 @@ UE = (
     / "Win64"
     / "UnrealEditor-Cmd.exe"
 )
-LEVEL = "/Game/Levels/L_Testbed"
+LEVEL = "/Game/Project/Environments/Levels/L_Testbed"
 CASES = {"hold": ("Replay", 2.0), "replay": ("Replay", 5.0), "policy": ("Policy", 5.0)}
 POLICY_BRAIN, POLICY_COMMAND = "go2_loco", [0.5, 0.0, 0.0]
 

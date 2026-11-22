@@ -4,7 +4,7 @@
 
 Run from PowerShell, not Git Bash (Git Bash rewrites "/Game/..." values into Windows paths).
 Imports training/assets/go2/scene_porace.xml through URLab, puts a URacerController on the imported Blueprint and
-builds /Game/Levels/L_Testbed. RACE_BRAIN = an .onnx to import as the default brain (default go2_loco).
+builds /Game/Project/Environments/Levels/L_Testbed. RACE_BRAIN = an .onnx to import as the default brain (default go2_loco).
 
 Chaos stays out: nothing placed here collides or simulates. MuJoCo (URLab) owns all physics.
 """
@@ -21,8 +21,8 @@ tools = unreal.AssetToolsHelpers.get_asset_tools()
 unreal.AssetRegistryHelpers.get_asset_registry().scan_paths_synchronous(["/Game"], True)
 MODEL = os.environ.get("RACE_MODEL", "training/assets/go2/scene_porace.xml")
 BRAIN = os.environ.get("RACE_BRAIN", "training/models/brains/go2_loco.onnx")
-LEVEL = "/Game/Levels/L_Testbed"
-BP = "/Game/Racers/Go2/BP_Go2_testbed"
+LEVEL = "/Game/Project/Environments/Levels/L_Testbed"
+BP = "/Game/Project/Agents/Racers/Go2/BP_Go2_testbed"
 
 
 def log(msg):
@@ -44,7 +44,7 @@ def import_file(src, dest, name=None):
     return [ASSETS.load_asset(p) for p in t.imported_object_paths]
 
 
-brain = import_file(BRAIN, "/Game/Brains")[0]
+brain = import_file(BRAIN, "/Game/Project/RL_Policies/Brains")[0]
 
 # The level first: wipe and save it so the old Blueprint has no references left (URLab refuses to import over a
 # Blueprint the open level still instantiates).
@@ -60,7 +60,7 @@ else:
 
 if ASSETS.does_asset_exist(BP):  # URLab won't overwrite; the MJCF may have changed
     ASSETS.delete_asset(BP)
-imported = import_file(MODEL, "/Game/Racers/Go2")
+imported = import_file(MODEL, "/Game/Project/Agents/Racers/Go2")
 racer_bp = next(a for a in imported if isinstance(a, unreal.Blueprint))
 ASSETS.rename_asset(racer_bp.get_path_name().split(".")[0], BP)  # URLab names it after the XML
 racer_bp = ASSETS.load_asset(BP)

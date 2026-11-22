@@ -35,7 +35,7 @@ $UeRoot = if ($env:UE_ROOT) { $env:UE_ROOT } else { "C:\Program Files\Epic Games
 $Editor = Join-Path $UeRoot "Engine\Binaries\Win64\UnrealEditor-Cmd.exe"
 $Project = Join-Path $Root "PoRaceUnreal.uproject"
 $Pascal = (($Track -split "_") | ForEach-Object { $_.Substring(0, 1).ToUpper() + $_.Substring(1) }) -join ""
-$Level = "/Game/Levels/L_$Pascal"
+$Level = "/Game/Project/Environments/Levels/L_$Pascal"
 $Out = Join-Path $Root "Saved\PoRace\regress"
 New-Item -ItemType Directory -Force $Out | Out-Null
 $Py = @("run", "--no-project", "--python", "3.12", "--with", "mujoco==4.0.0", "--with", "onnxruntime", "--with", "numpy", "python")

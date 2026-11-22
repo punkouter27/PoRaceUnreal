@@ -8,7 +8,7 @@
 
 struct FRaceTrackInfo
 {
-	FString Id, Name, Terrain, Level;	// Level: /Game/Levels/L_<Pascal>
+	FString Id, Name, Terrain, Level;	// Level: /Game/Project/Environments/Levels/L_<Pascal>
 	bool bClosed = false, bBuilt = false;
 	double Length = 0.0;
 	int32 DefaultLaps = 1;

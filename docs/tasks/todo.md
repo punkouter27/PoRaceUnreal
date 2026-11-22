@@ -21,7 +21,7 @@ Plan approved 2026-11-10.
 - [x] 1.1 `PoRaceUnreal.uproject` (UE 5.8, C++ module `PoRaceUnreal`, URLab + NNE ORT + Basic CPU)
 - [x] 1.2 `scripts/setup_urlab.ps1` + `Plugins/urlab_porace.patch` (PoSlap's 8 patches + MuJoCo 4.0.0 pin + MuJoCo 4 API fixes)
 - [x] 1.3 `training/contract.py` → `training/models/go2_fingerprint.json` + `Source/PoRaceUnreal/RaceContract.gen.h`
-- [x] 1.4 Go2 imported into `/Game/Levels/L_Testbed` by `scripts/build_testbed.py`
+- [x] 1.4 Go2 imported into `/Game/Project/Environments/Levels/L_Testbed` by `scripts/build_testbed.py`
 - [ ] 1.4b Coordinate marker check (MuJoCo → Unreal cm, Y mirrored): moved to Slice 2, where the visuals are first drawn
 - [x] 1.5 Model readback: 140 physics arrays, 0 differ (after URacerController writes the training numbers back; see `docs/20261110/slice1.md`)
 - [x] 1.6 `URacerController` (observation, brain via NNE ORT, action map; replay and recording)
@@ -33,7 +33,7 @@ Plan approved 2026-11-10.
 
 ## Slice 2 — One race, one racer
 - [x] 2.0 (from 1.4b, 1.10b) Coordinate marker check and run-time no-Chaos check, every race test (`ARaceDirector`)
-- [x] 2.1 `training/build_track_model.py` (centre line → rails, racers attached with a name prefix) and `scripts/build_track.py` (`/Game/Levels/L_PlanarSprint`)
+- [x] 2.1 `training/build_track_model.py` (centre line → rails, racers attached with a name prefix) and `scripts/build_track.py` (`/Game/Project/Environments/Levels/L_PlanarSprint`)
 - [x] 2.2 `training/race.py` + `training/racelib/` reference: countdown, steering, checkpoints, un-stick, off-track, finish. Split times moved to 7.4 (gate timing)
 - [x] 2.3 `FRaceRules` + `FRaceTrack` in Unreal, run by `URacerController` on the physics thread (one controller per track model: URLab calls one per articulation)
 - [x] 2.4 Get-up switch and auto-reset (`FGo2Racer`); flip test passes in both runtimes

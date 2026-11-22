@@ -40,7 +40,9 @@ PoRaceUnreal/
   Content/
     Art/Raw/                  .blend sources
     Art/Exports/              FBX / GLB / textures
-    Racers/ Tracks/ Brains/ Data/ FX/ Audio/ Levels/ MuJoCoImports/
+    Project/                  every Unreal asset (/Game/Project): Agents/Racers, Environments/{Levels,Tracks,MuJoCoImports},
+                              RL_Policies/Brains, DataAssets (reward + showcase config)
+    Data/                     staged as non-UFS files in packaged builds
   Config/
   scripts/                    Unreal editor Python: build_track.py, set_brain.py, setup_urlab.ps1, verify_all.ps1
   training/                   Docker trainer, envs, gates, race.py (reference), models/, final/
@@ -110,7 +112,7 @@ A race test prints one result line per race in the Unity format (`FINISHED|DNF m
 
 ## 4. Pipelines
 
-**Body:** Blender source → `tools/blender/*` → MJCF in `training/models/<name>/` → `training/check_model.py` gate → `training/build_track_model.py` composes track + every ready racer into one MJCF → `scripts/build_track.py` imports it through URLab into `/Game/Levels/L_<Track>`.
+**Body:** Blender source → `tools/blender/*` → MJCF in `training/models/<name>/` → `training/check_model.py` gate → `training/build_track_model.py` composes track + every ready racer into one MJCF → `scripts/build_track.py` imports it through URLab into `/Game/Project/Environments/Levels/L_<Track>`.
 
 **Brain:** `training/train.py` → ladder → graduation (100 straight trials) → `export_onnx.py` → `training/models/brains/<name>_<skill>.onnx` → `export_cpu_brains.py` → `Content/Data/Brains/*.bin` → `scripts/set_brain.py`.
 

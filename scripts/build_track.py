@@ -6,7 +6,7 @@
 Run from PowerShell, not Git Bash (Git Bash rewrites "/Game/..." values into Windows paths).
 Needs training/assets/tracks/<track>.xml and its fingerprint first: python training/build_track_model.py <track>.
 
-Builds /Game/Levels/L_<Track>:
+Builds /Game/Project/Environments/Levels/L_<Track>:
   - the track model through URLab (floor, rails, every racer) with a URacerController that runs the race
   - the track surface as drawn meshes (5 m tiles in two shades, start line, checkpoint marks, finish line)
   - sun, sky, fog, the director (ARaceDirector) and its chase camera
@@ -32,8 +32,8 @@ unreal.AssetRegistryHelpers.get_asset_registry().scan_paths_synchronous(["/Game"
 MEL = unreal.MaterialEditingLibrary
 TRACK = os.environ.get("RACE_TRACK", "planar_sprint")
 PASCAL = "".join(w.capitalize() for w in TRACK.split("_"))
-LEVEL = f"/Game/Levels/L_{PASCAL}"
-FOLDER = f"/Game/Tracks/{PASCAL}"
+LEVEL = f"/Game/Project/Environments/Levels/L_{PASCAL}"
+FOLDER = f"/Game/Project/Environments/Tracks/{PASCAL}"
 BP = f"{FOLDER}/BP_{PASCAL}_Track"
 OPEN_END = 6.0  # m of drawn surface past each end of an open track (as the rails)
 SURFACE_TOP = 0.002  # m: the drawn surface sits 2 mm above MuJoCo's floor plane (no z-fighting; the feet hide it)
@@ -80,12 +80,12 @@ FP = json.loads(open(os.path.join(PROJ, f"training/models/tracks/{TRACK}_fingerp
 
 def human_skin(card):
     """A human racer's scan as a skeletal mesh (no physics asset: MuJoCo owns the body) and its material, imported once
-    into /Game/Racers/<Name>/. RACE_REIMPORT=1 redoes it."""
+    into /Game/Project/Agents/Racers/<Name>/. RACE_REIMPORT=1 redoes it."""
     name = card["racerName"]
     folder, mesh_path, mat_path = (
-        f"/Game/Racers/{name}",
-        f"/Game/Racers/{name}/SK_{name}",
-        f"/Game/Racers/{name}/M_{name}",
+        f"/Game/Project/Agents/Racers/{name}",
+        f"/Game/Project/Agents/Racers/{name}/SK_{name}",
+        f"/Game/Project/Agents/Racers/{name}/M_{name}",
     )
     if (
         os.environ.get("RACE_REIMPORT") != "1"
@@ -305,12 +305,12 @@ for r in FP["racers"]:
 def stroller_skin(card):
     """The stroller's scan (Content/Art/Stroller/SK_Stroller.fbx: root + one bone per wheel) as a skeletal mesh with
     no physics asset (MuJoCo owns the body; its README's Chaos vehicle setup is not used) and a material from its 4K
-    diffuse and normal maps. Imported once into /Game/Racers/Stroller/; RACE_REIMPORT=1 redoes it."""
+    diffuse and normal maps. Imported once into /Game/Project/Agents/Racers/Stroller/; RACE_REIMPORT=1 redoes it."""
     name = card["racerName"]
     folder, mesh_path, mat_path = (
-        f"/Game/Racers/{name}",
-        f"/Game/Racers/{name}/SK_{name}",
-        f"/Game/Racers/{name}/M_{name}",
+        f"/Game/Project/Agents/Racers/{name}",
+        f"/Game/Project/Agents/Racers/{name}/SK_{name}",
+        f"/Game/Project/Agents/Racers/{name}/M_{name}",
     )
     if (
         os.environ.get("RACE_REIMPORT") != "1"

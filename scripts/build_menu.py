@@ -1,4 +1,4 @@
-"""Unreal Editor Python: the menu level /Game/Levels/L_Menu. Idempotent.
+"""Unreal Editor Python: the menu level /Game/Project/Environments/Levels/L_Menu. Idempotent.
 
     UnrealEditor-Cmd.exe PoRaceUnreal.uproject -run=pythonscript -script="<abs path>/Scripts/build_menu.py" -unattended
 
@@ -9,7 +9,7 @@ only sky and light). START opens the picked track's level.
 import unreal
 
 ASSETS = unreal.EditorAssetLibrary
-LEVEL = "/Game/Levels/L_Menu"
+LEVEL = "/Game/Project/Environments/Levels/L_Menu"
 unreal.AssetRegistryHelpers.get_asset_registry().scan_paths_synchronous(["/Game"], True)
 les = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
 eas = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)

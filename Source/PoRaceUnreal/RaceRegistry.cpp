@@ -43,7 +43,7 @@ FString RaceRegistry::LevelOf(const FString& TrackId)
 	TrackId.ParseIntoArray(Words, TEXT("_"));
 	FString Pascal;
 	for (const FString& W : Words) Pascal += W.Left(1).ToUpper() + W.Mid(1);
-	return TEXT("/Game/Levels/L_") + Pascal;
+	return TEXT("/Game/Project/Environments/Levels/L_") + Pascal;
 }
 
 TArray<FRaceTrackInfo> RaceRegistry::Tracks()

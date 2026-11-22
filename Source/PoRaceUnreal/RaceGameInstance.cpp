@@ -17,5 +17,5 @@ void URaceGameInstance::StartRace(UObject* Context)
 
 void URaceGameInstance::OpenMenu(UObject* Context)
 {
-	UGameplayStatics::OpenLevel(Context, FName(TEXT("/Game/Levels/L_Menu")), true);
+	UGameplayStatics::OpenLevel(Context, FName(TEXT("/Game/Project/Environments/Levels/L_Menu")), true);
 }
