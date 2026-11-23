@@ -7,7 +7,7 @@ Po Game Standard C9 / C10 / C12 / C13. Code: `Source/PoRaceUnreal/RaceShowcase.*
 panel (#121826, text #e6e9f2, ~14:1) with FPS, the current episode reward, inference latency (rolling mean of the last
 60 policy steps, ms) and the curriculum stage. `-DiagOverlay` starts with it open.
 
-The overlay's **Benchmark training speed (sim steps/s)** button steps a private copy of the loaded MuJoCo model (one
+The overlay's **Benchmark sim speed (sim steps/s)** button steps a private copy of the loaded MuJoCo model (one
 environment, no policy, no rendering) on this CPU for at most `BenchmarkMaxSeconds` (1 s) / `BenchmarkMaxSteps`
 (20 000) and shows steps per second and the real-time factor. It measures CPU simulation speed, which bounds a CPU
 rollout; it is not the GPU (MJX / Brax) trainer's throughput, and the result line says so. `-ShowcaseBench` runs it once

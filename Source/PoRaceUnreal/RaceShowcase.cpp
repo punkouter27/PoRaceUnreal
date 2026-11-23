@@ -224,7 +224,7 @@ void URaceShowcaseSubsystem::AddWidgets()
 							SNew(SBorder).BorderImage(White).BorderBackgroundColor(RaceShowcaseUi::Line()).Padding(FMargin(12.f, 6.f)).VAlign(VAlign_Center)
 							[
 								SNew(STextBlock).Font(Body).ColorAndOpacity(RaceShowcaseUi::Text())
-								.Text(NSLOCTEXT("RaceShowcase", "BenchButton", "Benchmark training speed (sim steps/s)"))
+								.Text(NSLOCTEXT("RaceShowcase", "BenchButton", "Benchmark sim speed (sim steps/s)"))
 							]
 						]
 					]
