@@ -1,11 +1,13 @@
 {
-  "_doc": "The /diag check list. web/build.py validates it, expands each file list (with the byte sizes it wrote) and publishes it as dist/diag_checks.json; diag.js probes every entry live from the browser. This static site calls no external API, so the checks cover the deployed bundle.",
+  "_doc": "The /diag check list. web/build.py validates it, expands each file list (with the byte sizes it wrote) and publishes it as dist/diag_checks.json; diag.js probes every entry live from the browser. The only external service is the jsDelivr CDN that serves onnxruntime-web to the policy viewer.",
   "checks": [
-    {"name": "page", "group": "api", "kind": "files", "label": "Showcase page", "purpose": "The home page and its stylesheet are served", "files": ["/index.html", "/style.css"]},
+    {"name": "page", "group": "api", "kind": "files", "label": "Showcase page", "purpose": "The home page, its stylesheet and icon are served", "files": ["/index.html", "/style.css", "/favicon.svg"]},
+    {"name": "viewer", "group": "api", "kind": "files", "label": "Policy viewer", "purpose": "The viewer page and its scripts are served", "files": ["/viewer.html", "/viewer.js", "/idle.js"]},
     {"name": "status-page", "group": "api", "kind": "files", "label": "Status page", "purpose": "This page and its probe script are served", "files": ["/diag.html", "/diag.js"]},
-    {"name": "version", "group": "api", "kind": "version", "label": "Build version", "purpose": "version.json carries the same stamp as this page (no stale or mixed deploy)", "path": "/version.json"},
+    {"name": "version", "group": "api", "kind": "version", "label": "Build version", "purpose": "version.json carries the same stamp and commit as this page (no stale or mixed deploy)", "path": "/version.json"},
     {"name": "screenshots", "group": "data", "kind": "files", "label": "Screenshots", "purpose": "Every screenshot on the home page is served and decodes", "files": "@screenshots"},
+    {"name": "policies", "group": "data", "kind": "files", "label": "Brains and recordings", "purpose": "Every ONNX brain the viewer runs and its recorded race are served", "files": "@policies"},
     {"name": "privacy", "group": "data", "kind": "files", "label": "Privacy policy", "purpose": "The Android app's privacy policy page is served", "files": ["/privacy-policy.html"]},
-    {"name": "external", "group": "service", "kind": "none", "label": "External services", "purpose": "APIs, databases or model files this site calls", "detail": "None: the showcase is static and calls no external service (the game itself runs locally)"}
+    {"name": "inference", "group": "service", "kind": "inference", "label": "Policy inference (onnxruntime-web)", "purpose": "onnxruntime-web loads from cdn.jsdelivr.net and a brain run here reproduces its recorded action", "url": "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.wasm.min.mjs"}
   ]
 }

@@ -43,3 +43,19 @@ then quits. `-ShowcaseIdle=<s>` overrides the idle threshold.
 The physics bodies have no neck joint, so gaze is render-only: `ARacerVisual` turns the Head bone of a human racer's
 skin toward the nearest rival ahead within `GazeRange` (8 m), else straight ahead, at most `GazeMaxDegrees` (60) off the
 torso, eased at `GazeSpeed`. The simulation is untouched; the log line `racer visual matt_: gaze target ...` reports it.
+
+## Tests for the idle clock and the penalty log
+- `PoRace.Showcase.IdleClock` (Source/PoRaceUnreal/RaceShowcaseTests.cpp, run rendered: see AGENTS.md "Verify") feeds
+  the clock 45 s, 15 s and 0.26 s frames and checks they never count as idle time; 30 s of normal frames start demo mode.
+- The trainer logs each penalty term on its own (`training/train.py` progress: TensorBoard `penalty/pen_torque_sq`,
+  `penalty/pen_joint_ang_vel_sq`, `penalty/pen_action_rate_sq`, `penalty/pen_foot_slip`, also printed per eval), from
+  `reward_config.penalty_log`; tests in `tests/test_reward_config.py` and `tests/test_reward_terms.py` (no training run).
+
+## Web policy viewer (/viewer)
+The showcase site's `/viewer` runs the racers' shipped ONNX brains in the browser (onnxruntime-web 1.20.1, WASM, one
+thread) on recorded CPU MuJoCo races (`docs/parity/*.json`: Go2 walk / fast / steeple, Matt) and checks every output
+against the recorded action; the console logs `[policy] <brain>.onnx (<racer>) inference in the browser ...`. The
+bodies replay the recording (no physics in the page). Tab or the "i" button shows FPS, inference latency, policy vs
+recorded, a reward proxy (metres travelled: the recordings store no reward), the curriculum stage and the mode, with a
+line saying what each number measures. 30 s without input starts demo mode (`web/idle.js`, frames > 0.25 s ignored,
+tested by `web/idle.test.mjs` through `tests/test_web_idle.py`).

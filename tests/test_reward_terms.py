@@ -38,3 +38,10 @@ def test_every_penalty_is_charged(make):
             total[t] += float(state.metrics[f"reward/{t}"])
     for t in terms:
         assert total[t] < 0.0, f"{t} was never charged: {total}"
+    # the trainer's per-term log (reward_config.penalty_log, written by train.py as penalty/pen_<term>) finds every
+    # penalty in this env's metrics, each on its own
+    import reward_config
+
+    logged = reward_config.penalty_log(state.metrics, prefix="reward/")
+    assert set(logged) == {f"pen_{k}" for k in reward_config.PENALTY_KEYS}, logged
+    assert all(v <= 0.0 for v in logged.values()), logged

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>%%TITLE%% · Policy viewer</title>
+<meta name="description" content="The racers' trained brains run in your browser on recorded races.">
+<meta name="po-version" content="%%VERSION%%">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body class="viewer-page">
+<header class="bar">
+  <a class="bar__title" href="/">%%TITLE%%</a>
+  <nav class="bar__actions" aria-label="Site">
+    <a href="/">Home</a>
+    <a href="/diag">Status</a>
+  </nav>
+</header>
+<main class="viewer" id="stage">
+  <h1 class="sr-only">Policy viewer</h1>
+  <canvas id="view" aria-label="Side view of the recorded race, drawn from MuJoCo body positions"></canvas>
+  <p class="viewer__status" id="policy-status" aria-live="polite">Loading the brains…</p>
+  <button type="button" class="ov-btn" id="overlayBtn" aria-label="Diagnostics (Tab)" title="Diagnostics (Tab)"
+    aria-expanded="false" aria-controls="overlay">i</button>
+  <section class="overlay" id="overlay" hidden aria-label="Diagnostics">
+    <dl>
+      <dt>FPS</dt><dd id="ov-fps">–</dd>
+      <dt>Inference latency</dt><dd id="ov-latency">–</dd>
+      <dt>Policy vs recorded</dt><dd id="ov-check">–</dd>
+      <dt>Reward</dt><dd id="ov-reward">–</dd>
+      <dt>Curriculum stage</dt><dd id="ov-stage">–</dd>
+      <dt>Mode</dt><dd id="ov-mode">–</dd>
+    </dl>
+    <p>What is measured: FPS = frames this page draws per second. Inference latency = the brain's ONNX run by
+      onnxruntime-web (WASM, 1 thread) on this device's CPU, mean of the last 60 control steps, fed the recorded
+      observation; "policy vs recorded" = max |action &minus; recorded action|. Reward: the recordings store none, so
+      this is a proxy, metres travelled since the start. No physics runs here: the bodies replay a CPU MuJoCo 4.0.0
+      rollout (Python reference sim, not the Unreal game, not a real robot). Training speed is benchmarked separately
+      (benchmark/, GPU).</p>
+  </section>
+  <div class="viewer__controls">
+    <label class="sr-only" for="replay">Recorded race</label>
+    <select id="replay"></select>
+    <button type="button" id="play">Pause</button>
+  </div>
+  <p class="demo-hint">Demo · press any key or touch to take over</p>
+</main>
+<footer class="foot"><span class="po-version">%%VERSION%%</span></footer>
+<script type="module" src="viewer.js"></script>
+</body>
+</html>

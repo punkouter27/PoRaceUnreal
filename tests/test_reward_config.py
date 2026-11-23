@@ -58,3 +58,38 @@ def test_trainers_read_the_file():
             pen["action_rate_sq"],
             pen["foot_slip"],
         )
+
+
+def test_penalty_log_one_value_per_term():
+    """brax eval metrics -> pen_torque_sq, pen_joint_ang_vel_sq, pen_action_rate_sq, pen_foot_slip, each separately;
+    the Go2's names (action_rate, feet_slip) map to the shared terms; terms an env lacks are left out, not zeroed."""
+    go2 = {
+        "eval/episode_reward": 12.0,
+        "eval/episode_reward/torque_sq": -0.5,
+        "eval/episode_reward/joint_ang_vel_sq": -0.25,
+        "eval/episode_reward/action_rate": -0.125,
+        "eval/episode_reward/feet_slip": -2.0,
+        "eval/episode_reward/feet_slip_std": 9.0,
+    }
+    assert reward_config.penalty_log(go2) == {
+        "pen_torque_sq": -0.5,
+        "pen_joint_ang_vel_sq": -0.25,
+        "pen_action_rate_sq": -0.125,
+        "pen_foot_slip": -2.0,
+    }
+    matt = {"eval/episode_reward/foot_slip": -1.0, "eval/episode_reward/feet_slip": -7.0}
+    assert reward_config.penalty_log(matt) == {"pen_foot_slip": -1.0}  # the config's term, not the stock pelvis slip
+    stroller = {"eval/episode_reward/action_rate": -0.3, "eval/episode_reward/torques": -1.0}
+    assert reward_config.penalty_log(stroller) == {"pen_action_rate_sq": -0.3}
+
+
+def test_trainer_logs_every_penalty_term():
+    """train.py's progress callback writes reward_config.penalty_log to TensorBoard (penalty/pen_<term>) and prints it
+    (checked in the source: importing train.py needs the GPU trainer stack; nothing is trained)."""
+    import ast
+
+    tree = ast.parse((ROOT / "training" / "train.py").read_text(encoding="utf-8"))
+    progress = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == "progress")
+    src = ast.unparse(progress)
+    assert "reward_config.penalty_log(metrics)" in src
+    assert "writer.add_scalar(f'penalty/{k}', v, num_steps)" in src

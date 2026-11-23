@@ -30,6 +30,7 @@ if not hasattr(jax, "device_put_replicated"):
     jax.device_put_replicated = _device_put_replicated
 
 import preflight
+import reward_config
 from brax.io import model as brax_model
 from brax.training.agents.ppo import networks as ppo_networks
 from brax.training.agents.ppo import train as ppo
@@ -242,8 +243,13 @@ def main():
             return  # a training-loss row (log_training_metrics): TensorBoard only
         r = metrics.get("eval/episode_reward", float("nan"))
         nan = [k for k, v in metrics.items() if not np.isfinite(float(v))]
+        pen = reward_config.penalty_log(metrics)  # each penalty term on its own: pen_torque_sq, ..., pen_foot_slip
+        for k, v in pen.items():
+            writer.add_scalar(f"penalty/{k}", v, num_steps)
+        writer.flush()
         print(
             f"{num_steps:>12,d}  reward={r:8.3f}  {time.monotonic() - t0:7.0f}s"
+            + "".join(f"  {k}={v:.4g}" for k, v in pen.items())
             + (f"  NAN in {len(nan)} metrics: {nan[:4]}" if nan else ""),
             flush=True,
         )

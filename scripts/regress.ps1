@@ -4,7 +4,7 @@
 #       [-Laps 2] [-FlipAt 20 [-FlipCount 2]] [-NoTactics] [-Handicap] [-YellowFlag] [-ContactGate] [-Parallel 3]
 #
 # Per seed:
-#   Unreal      UnrealEditor-Cmd -game -nullrhi -RaceTest (the level's checks gate it: exit 3 on a failed check)
+#   Unreal      UnrealEditor-Cmd -game -windowed (rendered, never -nullrhi) -RaceTest (the level's checks gate it: exit 3 on a failed check)
 #   exact       Python on the model Unreal ran (Saved/PoRace/model_bound_<track>.mjb): the result line, the events (passes,
 #               yellow flags) and the contact audit must be identical
 #   self test   the tactics and yellow-flag rules without physics (-RaceSelfTest vs training/selftest.py): identical lines
@@ -69,7 +69,7 @@ $jobs = @()
 foreach ($s in $SeedList) {
     while (@($jobs | Where-Object { -not $_.Process.HasExited }).Count -ge $Parallel) { Start-Sleep -Milliseconds 500 }
     $log = Join-Path $Out "ue_${Track}${Tag}_$s.log"
-    $ueArgs = @("`"$Project`"", $Level, "-game", "-nullrhi", "-unattended", "-nosplash", "-nosound", "-RaceTest", "-Seed=$s", "-stdout", "-FullStdOutLogOutput")
+    $ueArgs = @("`"$Project`"", $Level, "-game", "-windowed", "-ResX=640", "-ResY=360", "-unattended", "-nosplash", "-nosound", "-RaceTest", "-Seed=$s", "-stdout", "-FullStdOutLogOutput")
     if ($FlipAt -ge 0) { $ueArgs += "-RaceFlipAt=$FlipAt" }
     if ($Racers) { $ueArgs += "-Racers=$Racers" }
     if ($Laps -gt 0) { $ueArgs += "-Laps=$Laps" }

@@ -23,6 +23,18 @@
 class SWidget;
 class FRaceShowcaseInput;
 
+/** The demo-mode idle clock: only frames of at most MaxFrame seconds count as idle time (a level load, shader compile or
+ *  stalled window is not the player being idle). Returns true once Idle has reached Threshold. Tested by the automation
+ *  test PoRace.Showcase.IdleClock (RaceShowcaseTests.cpp). */
+struct FRaceIdleClock
+{
+	static bool Advance(float& Idle, float Dt, float MaxFrame, float Threshold)
+	{
+		if (Dt > 0.f && Dt <= MaxFrame) Idle += Dt;
+		return Idle >= Threshold;
+	}
+};
+
 /** Idle demo + diagnostics overlay tunables. Create one in the editor (Miscellaneous > Data Asset) to override. */
 UCLASS(BlueprintType)
 class PORACEUNREAL_API URaceShowcaseConfig : public UPrimaryDataAsset

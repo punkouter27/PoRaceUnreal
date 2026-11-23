@@ -15,7 +15,7 @@ physics authority; Unreal renders and presents the simulation. Read `docs/spec.m
 | `tests/` | pytest suite (`pytest` from the repo root) |
 | `scripts/` | Unreal editor Python (`build_track.py`, ...), `regress.ps1`, `verify_all.ps1`, `setup_urlab.ps1` (clone + patch + build URLab, editor-Python packages) |
 | `tools/` | Blender / Android / maintenance helpers |
-| `web/` | Static showcase site + `/diag`, built by `web/build.py`, deployed to `swa-poraceunreal` |
+| `web/` | Static showcase site, `/viewer` (brains run in the browser with onnxruntime-web on recorded races, Tab overlay, 30 s demo mode in `idle.js`) and `/diag`, built by `web/build.py`, deployed to `swa-poraceunreal` |
 | `docs/` | Spec, PRD, plan / todo (`docs/tasks/`), slice reports, proposals |
 | `Content/Project/` | Unreal assets (`/Game/Project/...`): `Agents/Racers`, `Environments/{Levels,Tracks,MuJoCoImports}`, `RL_Policies/Brains`, `DataAssets` (`DA_RaceRewardConfig`, `DA_RaceShowcaseConfig`, picked in `Config/DefaultGame.ini`). No `Core`/`UI` assets: the HUD and overlay are C++ Slate. `Content/Art/` holds raw source files (fbx/png/blend), not assets |
 
@@ -50,7 +50,7 @@ physics authority; Unreal renders and presents the simulation. Read `docs/spec.m
 
 - `.github/workflows/deploy.yml` (the only workflow): on push to `master` it runs the Python checks (ruff, pytest),
   builds the showcase site (`web/build.py`), deploys it to the Azure Static Web App `swa-poraceunreal`
-  (resource group `PoShared`, secret `AZURE_STATIC_WEB_APPS_API_TOKEN`) and checks `/` and `/diag` live.
+  (resource group `PoRaceUnreal`, secret `AZURE_STATIC_WEB_APPS_API_TOKEN`) and checks `/`, `/viewer` and `/diag` live.
 - The workflow confirms the deploy by the `X-Commit` header on `/` (written by `web/build.py` into the Static Web App
   config) matching the pushed commit, plus `version.json`, `/` and `/diag`.
 - The Unreal project is built and tested locally (GitHub's runners have no Unreal Engine). After a fresh clone run
@@ -81,7 +81,7 @@ physics authority; Unreal renders and presents the simulation. Read `docs/spec.m
 | `Content/Art/` holds raw source files, not assets; no `Core`/`UI` assets (HUD is C++ Slate) | files, not cooked assets | `ffa6927` 2026-11-22 | — |
 | Unreal is built and tested locally only; CI runs the Python checks and the showcase site | no Unreal Engine on GitHub runners | — | — |
 
-**Hosting:** Azure Static Web App `swa-poraceunreal` (RG `PoShared`), Free tier. Never run test suites against the live
+**Hosting:** Azure Static Web App `swa-poraceunreal` (RG `PoRaceUnreal`), Free tier. Never run test suites against the live
 site; live checks = at most 6 page loads + /diag + X-Commit.
 
 ## Concurrent work
@@ -100,14 +100,17 @@ One command sequence verifies the repo (after `scripts\setup_urlab.ps1` once per
 ruff check . && ruff format --check . && python -m pytest && python web/build.py --check && powershell -File scripts\verify_all.ps1 -Unreal
 ```
 
-Last full run (2026-11-22): pytest 35 passed; build 0 warnings in `Source/PoRaceUnreal`; RaceUiTest 0 failures at
-1280x720, 540x1170, 1600x900 and 450x800; 307 assets, 0 redirectors. The steps one by one:
+Last full run (2026-11-23, 3 in a row): pytest 39 passed; build 0 warnings in `Source/PoRaceUnreal`; automation
+PoRace.Showcase.IdleClock Success (D3D12); RaceUiTest 0 failures at 1280x720 and 540x1170; showcase capture at 1600x900
+and 450x800; /viewer + /diag axe 0, `[policy]` console line, demo at 30.05 s; regress planar_sprint seed 1 rendered OK;
+307 assets, 0 redirectors. The steps one by one:
 
 ```powershell
 # Python (3.12 venv with the [dependency-groups] dev list from pyproject.toml)
 ruff check .
 ruff format --check .
-python -m pytest                       # 35 tests: contract, models, physics rules, reward terms, brains, race, web build
+python -m pytest                       # 39 tests: contract, models, physics rules, reward terms + per-term log, brains,
+                                       # race, web build (viewer brains), web/idle.test.mjs via Node (node on PATH)
 python web/build.py --check
 
 # Unreal (Windows, UE 5.8 at C:\Program Files\Epic Games\UE_5.8)
@@ -121,7 +124,10 @@ powershell -File scripts\setup_urlab.ps1          # once per clone: URLab clone 
 # Overlay, benchmark and idle demo (docs/showcase.md): writes overlay_on/off, demo_a/b PNGs, logs the benchmark
 & "C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe" "$PWD\PoRaceUnreal.uproject" -game -windowed `
     -ResX=1600 -ResY=900 -ShowcaseCapture=<dir> -ShowcaseTouch -ShowcaseBench -DiagOverlay -unattended -nosplash -nosound
-# Everything incl. the parity and regression gates: scripts\verify_all.ps1 -Unreal
+# Automation tests (PoRace.Showcase.IdleClock: 30 s idle, frames > 0.25 s ignored), rendered (never -nullrhi)
+& "C:\Program Files\Epic Games\UE_5.8\Engine\Binaries\Win64\UnrealEditor.exe" "$PWD\PoRaceUnreal.uproject" `
+    -ExecCmds="Automation RunTests PoRace;Quit" -TestExit="Automation Test Queue Empty" -unattended -nosplash -nosound -windowed -ResX=1280 -ResY=720
+# Everything incl. the parity and regression gates (Unreal rendered in small windows, never -nullrhi): scripts\verify_all.ps1 -Unreal
 ```
 
 ## Po Game Standard (Unity / Unreal RL games)

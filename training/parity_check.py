@@ -4,7 +4,7 @@
     ... parity_check.py make                       # only write the replay files Unreal plays
     ... parity_check.py compare <name>             # only compare an existing Unreal dump
 
-`run` launches Unreal once per case (headless, -nullrhi) and compares what it recorded with Python:
+`run` launches Unreal once per case (rendered in a small window, never -nullrhi) and compares what it recorded with Python:
 
   hold      2 s holding the home pose, no brain          gate: every body within 1 mm, joints within 1e-6
   replay    5 s of recorded controls (go2_loco, 0.5 m/s) gate: every body within 1 mm at every physics step
@@ -301,7 +301,9 @@ def launch(name):
         str(ROOT / "PoRaceUnreal.uproject"),
         LEVEL,
         "-game",
-        "-nullrhi",
+        "-windowed",
+        "-ResX=640",
+        "-ResY=360",
         "-unattended",
         "-nosplash",
         "-nosound",

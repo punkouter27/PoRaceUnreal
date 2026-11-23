@@ -408,8 +408,8 @@ void URaceShowcaseSubsystem::Tick(float DeltaTime)
 		Fps = Fps <= 0.f ? Inst : FMath::Lerp(Fps, Inst, 0.05f);
 	}
 	// a long frame (level load, shader compile, stalled window) is not the player being idle
-	if (Dt <= MaxIdleFrame) IdleTime += Dt;
-	if (!bDemoActive && !bDemoDisabled && IdleTime >= IdleThreshold) SetDemoActive(true);
+	const bool bIdleLongEnough = FRaceIdleClock::Advance(IdleTime, Dt, MaxIdleFrame, IdleThreshold);
+	if (!bDemoActive && !bDemoDisabled && bIdleLongEnough) SetDemoActive(true);
 	if (bBenchOnStart && IdleTime > 3.f)
 	{
 		bBenchOnStart = false;

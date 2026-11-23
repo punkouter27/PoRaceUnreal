@@ -86,3 +86,33 @@ h2 { font-size: 20px; margin: 32px 0 12px; }
   .foot { position: static; }
 }
 .meta { color: var(--muted); font-size: 14px; }
+
+/* Policy viewer (/viewer): the canvas fills the space between the top bar and the footer, any aspect. */
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+body.viewer-page { height: 100vh; height: 100dvh; min-height: 0; overflow: hidden; }
+body.viewer-page .foot { position: static; }
+main.viewer { position: relative; flex: 1; min-height: 0; max-width: none; padding: 0; overflow: hidden; }
+#view { display: block; width: 100%; height: 100%; touch-action: none; }
+.viewer__status { position: absolute; top: 8px; left: 12px; right: 64px; margin: 0; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+.viewer__controls { position: absolute; left: 12px; right: 12px; bottom: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+.viewer__controls select, .viewer__controls button {
+  min-height: 44px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line);
+  background: var(--surface-2); color: var(--text); font: 15px Inter, system-ui, sans-serif;
+}
+.viewer__controls select { flex: 1 1 220px; max-width: 360px; min-width: 0; }
+.viewer__controls :focus-visible, .ov-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ov-btn { position: absolute; top: 8px; right: 8px; width: 44px; height: 44px; border-radius: 10px; z-index: 3;
+  background: var(--surface-2); color: var(--text); border: 1px solid var(--line); font: 700 18px/1 Inter, system-ui, sans-serif; cursor: pointer; }
+/* Diagnostics overlay (Tab or the "i" button): an opaque panel, text >= 4.5:1. */
+.overlay { position: absolute; top: 56px; left: 12px; right: 12px; max-width: 460px; max-height: calc(100% - 128px); overflow: auto;
+  z-index: 2; padding: 10px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; font-size: 13px; }
+.overlay dl { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 0; }
+.overlay dt { color: var(--muted); }
+.overlay dd { margin: 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.overlay p { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+/* Demo mode (30 s without input): controls hidden, the camera orbits, the recorded races take turns. */
+.demo-hint { display: none; position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); margin: 0; padding: 4px 10px;
+  border-radius: 6px; background: var(--surface); color: var(--text); font-size: 12px; white-space: nowrap; }
+body.demo .viewer__controls { display: none; }
+body.demo .demo-hint { display: block; }
+.diag-cache { color: var(--muted); font-size: 14px; }

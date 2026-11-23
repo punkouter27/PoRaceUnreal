@@ -20,5 +20,12 @@
     {"src": "SCREENSHOTS/slice4/Menu_1280x720.png", "caption": "Track and field picker"},
     {"src": "SCREENSHOTS/slice4/FlatOval_1_grid_540x1170.png", "caption": "The same race on a phone (portrait)"}
   ],
+  "_replays_doc": "Policy viewer (/viewer): each entry ships training/models/brains/<brain>.onnx and the recorded CPU MuJoCo rollout of that brain (obs, action, qpos per 50 Hz step). web/build.py checks that the ONNX reproduces the recorded actions.",
+  "replays": [
+    {"name": "go2_loco", "label": "Blue (Go2) walking at 0.5 m/s", "character": "go2", "brain": "go2_loco", "recording": "docs/parity/reference_trajectory.json", "model": "training/assets/go2/scene_porace.xml"},
+    {"name": "go2_fast", "label": "Blue (Go2) running at 2 m/s", "character": "go2", "brain": "go2_loco_fast", "recording": "docs/parity/reference_fast.json", "model": "training/assets/go2/scene_porace.xml"},
+    {"name": "go2_steeple", "label": "Blue (Go2), steeple brain, 1.5 m/s", "character": "go2", "brain": "go2_loco_steeple", "recording": "docs/parity/reference_steeple.json", "model": "training/assets/go2/scene_porace.xml"},
+    {"name": "matt", "label": "Matt running at 1.2 m/s", "character": "matt", "brain": "matt_loco", "recording": "docs/parity/matt_reference_m20.json", "model": "training/matt/assets/matt_porace.xml"}
+  ],
   "extra_files": ["privacy-policy.html"]
 }

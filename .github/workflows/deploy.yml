@@ -1,7 +1,7 @@
 name: Test & Deploy Showcase
 
 # The one workflow. Push to master: Python checks (ruff, pytest) -> build the showcase site (web/build.py) -> deploy it
-# to the Azure Static Web App swa-poraceunreal (resource group PoShared) -> check / and /diag live, and that the
+# to the Azure Static Web App swa-poraceunreal (resource group PoRaceUnreal) -> check /, /viewer and /diag live, and that the
 # X-Commit header on / is this commit. Pull requests get the checks and the build, never a deploy. The Unreal project
 # is built locally (GitHub's runners have no Unreal Engine); URLab is not tracked: scripts/setup_urlab.ps1 clones,
 # patches and builds it into Plugins/.
@@ -78,7 +78,7 @@ jobs:
           skip_app_build: true
           skip_api_build: true
 
-      - name: Check / and /diag live
+      - name: Check /, /viewer and /diag live
         if: steps.deploy.outcome == 'success'
         env:
           URL: ${{ steps.deploy.outputs.static_web_app_url }}
@@ -89,8 +89,9 @@ jobs:
               && curl -fsS --max-time 30 "$URL/version.json" | grep -q "\"$VERSION\"" \
               && curl -fsS --max-time 30 "$URL/" | grep -q "PoRace" \
               && curl -fsS --max-time 30 "$URL/diag" | grep -q "<title>System status</title>" \
+              && curl -fsS --max-time 30 "$URL/viewer" | grep -q "viewer.js" \
               && curl -fsS --max-time 30 "$URL/diag_checks.json" | grep -q '"checks"'; then
-              echo "Live: $URL ($VERSION, X-Commit $GITHUB_SHA), / and /diag served"; exit 0
+              echo "Live: $URL ($VERSION, X-Commit $GITHUB_SHA), /, /viewer and /diag served"; exit 0
             fi
             sleep 15
           done
