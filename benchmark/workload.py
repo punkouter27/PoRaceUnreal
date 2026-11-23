@@ -28,6 +28,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import core  # noqa: E402
 
+core.TRAINER_IN_PROCESS = False  # the trainer runs in the container; this host process only feeds the Meter
+
 ROOT = Path(__file__).resolve().parents[1]
 IMAGE = "porace-trainer"
 CONTAINER = "porace_benchmark"  # porace_* = a GPU run that training/queue_8h_overnight.sh waits for
