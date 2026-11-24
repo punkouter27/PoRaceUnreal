@@ -130,6 +130,15 @@ powershell -File scripts\setup_urlab.ps1          # once per clone: URLab clone 
 # Everything incl. the parity and regression gates (Unreal rendered in small windows, never -nullrhi): scripts\verify_all.ps1 -Unreal
 ```
 
+UI changes ("save before/after evidence under SCREENSHOTS/"): one command builds `web/dist` for this tree and for the
+`-Before` ref (default `HEAD~1`, a temporary worktree) or takes `-BeforeDir` PNGs named `*_<route>_<W>x<H>.png`, shoots
+`/`, `/diag.html`, `/viewer.html` locally at 1366x768 and 390x844 (headless Edge, never the live site) and writes the page:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\screenshots.ps1 -Feature <name> [-Before <ref> | -BeforeDir <dir>] [-Notes "..."]
+# -> SCREENSHOTS/<yyMMdd>-<feature>.html + .png (side by side, annotated) + <yyMMdd>-<feature>/ (scaled shots)
+```
+
 ## Po Game Standard (Unity / Unreal RL games)
 
 This repo is one of several independent Po games. It follows the conventions below, but it owns every file:

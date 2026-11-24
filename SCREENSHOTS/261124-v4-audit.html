@@ -1,0 +1,20 @@
+﻿<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PoRace - v4-audit</title>
+<style>
+:root { color-scheme: dark; } body { margin: 0; padding: 16px; background: #0e0e12; color: #e8e8ee; font: 14px/1.5 "Segoe UI", system-ui, sans-serif; }
+h1 { font-size: 20px; margin: 0 0 4px; } p.meta { color: #aaaab9; margin: 0 0 16px; }
+section { margin: 0 0 24px; } h2 { font-size: 15px; margin: 0 0 6px; } .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+figure { margin: 0; } figcaption { color: #aaaab9; font-size: 12px; } img { max-width: 100%; height: auto; border: 1px solid #2a2a33; }
+@media (max-width: 700px) { .pair { grid-template-columns: 1fr; } }
+</style></head><body>
+<h1>PoRace - v4-audit</h1>
+<p class="meta">Before: PNGs from before_shots. After: working tree at 761b263. Captured locally (web/dist), 2026-11-24 03:15. v4 audit (761b263): new /viewer (brains run in the browser, Tab overlay, 30 s demo), /diag cache + Re-check + inference probe, home title shown once. Before = the audit&#39;s live shots of 761b263~1 (no /viewer then).</p>
+<p><img src="261124-v4-audit.png" alt="All screens side by side, before and after"></p><section><h2>/ at 1366x768 <small>(25.2% of pixels differ)</small></h2><div class="pair"><figure><img src="261124-v4-audit/before_root_1366x768.png" alt="before, / at 1366x768"><figcaption>before</figcaption></figure><figure><img src="261124-v4-audit/after_root_1366x768.png" alt="after, / at 1366x768"><figcaption>after</figcaption></figure></div></section>
+<section><h2>/ at 390x844 <small>(24.2% of pixels differ)</small></h2><div class="pair"><figure><img src="261124-v4-audit/before_root_390x844.png" alt="before, / at 390x844"><figcaption>before</figcaption></figure><figure><img src="261124-v4-audit/after_root_390x844.png" alt="after, / at 390x844"><figcaption>after</figcaption></figure></div></section>
+<section><h2>/diag.html at 1366x768 <small>(2.0% of pixels differ)</small></h2><div class="pair"><figure><img src="261124-v4-audit/before_diag_1366x768.png" alt="before, /diag.html at 1366x768"><figcaption>before</figcaption></figure><figure><img src="261124-v4-audit/after_diag_1366x768.png" alt="after, /diag.html at 1366x768"><figcaption>after</figcaption></figure></div></section>
+<section><h2>/diag.html at 390x844 <small>(12.1% of pixels differ)</small></h2><div class="pair"><figure><img src="261124-v4-audit/before_diag_390x844.png" alt="before, /diag.html at 390x844"><figcaption>before</figcaption></figure><figure><img src="261124-v4-audit/after_diag_390x844.png" alt="after, /diag.html at 390x844"><figcaption>after</figcaption></figure></div></section>
+<section><h2>/viewer.html at 1366x768 <small>(n/a)</small></h2><div class="pair"><figure><img src="261124-v4-audit/before_viewer_1366x768.png" alt="before, /viewer.html at 1366x768"><figcaption>before</figcaption></figure><figure><img src="261124-v4-audit/after_viewer_1366x768.png" alt="after, /viewer.html at 1366x768"><figcaption>after</figcaption></figure></div></section>
+<section><h2>/viewer.html at 390x844 <small>(n/a)</small></h2><div class="pair"><figure><img src="261124-v4-audit/before_viewer_390x844.png" alt="before, /viewer.html at 390x844"><figcaption>before</figcaption></figure><figure><img src="261124-v4-audit/after_viewer_390x844.png" alt="after, /viewer.html at 390x844"><figcaption>after</figcaption></figure></div></section>
+</body></html>
+

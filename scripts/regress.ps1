@@ -51,6 +51,16 @@ if ($Handicap) { $Extra += "--handicap"; $Tag += "_handicap" }
 if ($YellowFlag) { $Extra += "--yellow-flag" }
 if ($ContactGate) { $Extra += "--contact-gate" }
 
+# Python through uv, its stdout and stderr as one text. uv reports "Installed N packages" on stderr when its cache is
+# cold; under the script's "Stop" preference Windows PowerShell turns any native stderr line into a terminating error,
+# so the regression aborted on the first cold run. Here stderr is plain text and only the exit code is checked.
+function Invoke-Uv {
+    $ErrorActionPreference = "Continue"
+    $lines = & uv @Py @args 2>&1 | ForEach-Object { "$_" }
+    if ($LASTEXITCODE) { Write-Host "  uv $($args -join ' ') exited $LASTEXITCODE" -ForegroundColor Yellow }
+    return ($lines -join "`n")
+}
+
 function RaceLine([string]$Text) {
     $m = [regex]::Match($Text, "\[Race\] ((FINISHED|CALLED|DNF) map=.*)")
     if ($m.Success) { return $m.Groups[1].Value.Trim() } else { return $null }
@@ -103,15 +113,16 @@ Push-Location (Join-Path $Root "training")
 try {
     foreach ($j in $jobs) {
         $s = $j.Seed
-        $text = Get-Content $j.Log -Raw
+        $text = [string](Get-Content $j.Log -Raw)   # an Unreal that died before logging leaves an empty file: fail the seed, don't abort
+        if (-not $text) { Write-Host "  seed ${s}: Unreal wrote no log (exit $($j.Process.ExitCode))" -ForegroundColor Red }
         $ue = RaceLine $text
         $code = $j.Process.ExitCode
         $checks = @([regex]::Matches($text, "\[Check\] ([^\r\n]*)") | ForEach-Object { $_.Groups[1].Value })
-        $exactText = (& uv @Py race.py $Track --seed $s --mjb $Mjb --audit @Extra 2>&1) -join "`n"
+        $exactText = Invoke-Uv race.py $Track --seed $s --mjb $Mjb --audit @Extra
         $exact = RaceLine $exactText
         $sameExtras = ((Tagged $text "Event") -eq (Tagged $exactText "Event")) -and ((Tagged $text "ContactAudit") -eq (Tagged $exactText "ContactAudit"))
         if (-not $sameExtras) { Write-Host "  seed ${s}: events / contact audit differ`n    Unreal: $(Tagged $text 'Event') $(Tagged $text 'ContactAudit')`n    Python: $(Tagged $exactText 'Event') $(Tagged $exactText 'ContactAudit')" }
-        $ref = RaceLine ((& uv @Py race.py $Track --seed $s @Extra 2>&1) -join "`n")
+        $ref = RaceLine (Invoke-Uv race.py $Track --seed $s @Extra)
         $tu = Times $ue; $tr = Times $ref
         $worst = 0.0
         foreach ($a in $tu) { $b = $tr | Where-Object Name -eq $a.Name; if ($b) { $worst = [Math]::Max($worst, [Math]::Abs($a.T - $b.T) / $b.T) } else { $worst = 1.0 } }
@@ -123,8 +134,8 @@ try {
                                     contact_audit = (Tagged $text "ContactAudit"); contact_gate = (Tagged $text "ContactGate"); worst_time_diff = [Math]::Round($worst, 5); checks = $checks }
     }
     # the self test: the first seed's Unreal run printed it
-    $ueSelf = Tagged (Get-Content $jobs[0].Log -Raw) "SelfTest"
-    $pySelf = ((Tagged ((& uv @Py selftest.py 2>&1) -join "`n") "SelfTest") -split "`n" | Where-Object { $_ -notmatch "^all passed|FAILED" }) -join "`n"
+    $ueSelf = Tagged ([string](Get-Content $jobs[0].Log -Raw)) "SelfTest"
+    $pySelf = ((Tagged (Invoke-Uv selftest.py) "SelfTest") -split "`n" | Where-Object { $_ -notmatch "^all passed|FAILED" }) -join "`n"
     $selfOk = $ueSelf -and ($ueSelf -eq $pySelf)
     Write-Host ("self test (tactics, yellow flag): {0} lines, Unreal and Python {1}" -f @($ueSelf -split "`n").Count, $(if ($selfOk) { "identical" } else { "DIFFERENT" })) -ForegroundColor $(if ($selfOk) { "Green" } else { "Red" })
     if (-not $selfOk) { $failed++; Write-Host "  Unreal:`n$ueSelf`n  Python:`n$pySelf" }
