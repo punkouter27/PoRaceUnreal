@@ -221,6 +221,143 @@
     "at power limit"
    ],
    "workload_changes": []
+  },
+  {
+   "when": "2026-11-26T12:02:19-05:00",
+   "ok": true,
+   "error": null,
+   "machine": {
+    "hostname": "C4T4V44",
+    "cpu": "13th Gen Intel(R) Core(TM) i7-13850HX (28 threads)",
+    "gpu": "NVIDIA RTX 2000 Ada Generation Laptop GPU",
+    "vram_gb": 8.0,
+    "ram_gb": 63.8,
+    "gpu_driver": "581.95",
+    "os": "Windows 11 (10.0.26100)"
+   },
+   "load_before": {
+    "cpu_pct": 22,
+    "cpu_max_core_pct": 77,
+    "trainer_cpu_cores": null,
+    "trainer_thread_pct": null,
+    "ram_used_gb": 27.0,
+    "gpu_pct": 0.0,
+    "gpu_mem_pct": 0.0,
+    "vram_used_gb": 1.4,
+    "gpu_temp_c": 66.0,
+    "sm_clock_mhz": 2115.0,
+    "sm_clock_max_mhz": 3105.0,
+    "power_w": 17.17,
+    "power_limit_w": 55.0,
+    "pstate": "P3",
+    "clock_reasons": [
+     "power cap",
+     "thermal (sw)"
+    ],
+    "display_active": true,
+    "pcie": "gen 4 x8",
+    "on_battery": false,
+    "gpu_processes": [
+     "Code.exe",
+     "Creative Cloud UI Helper.exe",
+     "CrossDeviceResume.exe",
+     "Docker Desktop.exe",
+     "PhoneExperienceHost.exe",
+     "SearchHost.exe",
+     "ShellExperienceHost.exe",
+     "ShellHost.exe",
+     "StartMenuExperienceHost.exe",
+     "TeamViewer.exe",
+     "TextInputHost.exe",
+     "ZSATray.exe",
+     "[Insufficient Permissions]",
+     "explorer.exe",
+     "ms-teams.exe",
+     "msedge.exe",
+     "msedgewebview2.exe"
+    ]
+   },
+   "load_during": {
+    "cpu_pct": 17.3,
+    "cpu_max_core_pct": 29513982.1,
+    "trainer_cpu_cores": null,
+    "trainer_thread_pct": null,
+    "ram_used_gb": 29.1,
+    "gpu_pct": 83.1,
+    "gpu_mem_pct": 21.7,
+    "vram_used_gb": 3.5,
+    "gpu_temp_c": 81.0,
+    "sm_clock_mhz": 2496.7,
+    "sm_clock_max_mhz": 3105.0,
+    "clock_pct_of_max": 80,
+    "power_w": 52.9,
+    "power_limit_w": 55.0,
+    "pstate": "P1",
+    "clock_reasons": {
+     "power cap": 0.89
+    },
+    "display_active": true,
+    "pcie": "gen 4 x8",
+    "on_battery": false,
+    "samples": 9
+   },
+   "busy": false,
+   "workload_id": "85fad9",
+   "workload": {
+    "repo": "PoRaceUnreal",
+    "trainer": "brax 0.14.2 ppo (jax 0.11.2, mujoco_warp 3.15.0)",
+    "script": "training/train.py (docker image porace-trainer, training/Dockerfile)",
+    "args": "--env grandma --num_envs 1024 --timesteps 120000000 --lr 5e-5 --entropy 0.005 --restore_params final/grandma_g13_grad84_params.pkl --set realism.gait_symmetry=-4.5 --set realism.torso_ang_acc=-0.4 --set realism.arm_swing=-0.1 --set realism.heat=-0.1 --set realism.action_delay_prob=0.3 --set realism.cmd_accel=6.0 --set reward_config.scales.tracking_lin_vel=3.5 --set reward_config.scales.tracking_lin_vel_wide=4.5 --set reward_config.scales.tracking_ang_vel=2.0 --set reward_config.scales.tracking_ang_vel_wide=1.0 --set reward_config.scales.pose=-0.015 --set reward_config.scales.stand_still=-0.5 --set reward_config.scales.alive=5.0 --set reward_config.scales.action_rate=-0.1 --set positive_reward=False",
+    "recipe": "Grandma g14 (docs/rl_optimization_log.md; training/queue_8h_overnight.sh)",
+    "num_envs": 1024,
+    "horizon": 20,
+    "batch": "256 x 32 minibatches x 4 updates",
+    "net": [
+     512,
+     256,
+     128
+    ],
+    "value_net": [
+     512,
+     256,
+     128
+    ],
+    "config_hash": "9a0676",
+    "split": "not observable (jitted): sim_ms = whole Step, learn_ms = 0",
+    "restore_note": "restores a copy of final/grandma_g13_grad84_params.pkl named grandma_start_params.pkl (preflight name check)"
+   },
+   "result": {
+    "step_time_ms": 18.274,
+    "sim_ms": 18.274,
+    "learn_ms": 0.0,
+    "env_steps_per_s": 56035,
+    "steps_measured": 640.0,
+    "measured_s": 11.7,
+    "startup_s": 120.9,
+    "step_p50_ms": 18.159,
+    "step_p95_ms": 18.906,
+    "sim_drift_pct": -1.0,
+    "blocks_measured": 4
+   },
+   "git_commit": "9aab16c",
+   "versions": {
+    "python": "3.12.3",
+    "jax": "0.11.2",
+    "brax": "0.14.2",
+    "mujoco": "3.15.0",
+    "mujoco_warp": "3.15.0",
+    "playground": "0.2.0",
+    "image": "b3a654906f27"
+   },
+   "context": {
+    "power_plan": "Balanced",
+    "power_mode": null,
+    "gpu_scheduling": null
+   },
+   "verdict": [
+    "at power limit"
+   ],
+   "workload_changes": []
   }
  ]
 }
