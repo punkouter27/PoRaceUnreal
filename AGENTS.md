@@ -27,6 +27,13 @@ physics authority; Unreal renders and presents the simulation. Read `docs/spec.m
 - Preserve the frozen physics, observation, action, joint-order, and checkpoint
   contracts. Changes to them require the corresponding parity and race gates in
   `docs/tasks/plan.md`; do not retrain, promote, or replace brains without those gates.
+- **Cross-app agent interface (UNITE).** `training/racelib/role_obs.py` builds the portable
+  **131-float / 28-role** observation and action map for any body that has a contract under
+  `global/UNITE/creatures` (Go2, Matt, Grandma, G1), and reproduces each creature's
+  `golden_role_obs.npz` to 1e-5 (`tests/test_role_obs.py`). It does **not** replace the racing
+  layout in `racelib/human.py` / `go2racer.py`, which `Source/PoRaceUnreal/RacerHuman.cpp` mirrors
+  line for line — changing that layout is a C++-and-Python change, not a Python one. The stroller has
+  no contract (R28): `find_contract` returns `None` and the test names it rather than inventing one.
 - Chaos must not simulate racers, track elements, or props (verified by `ARaceDirector::CheckChaos`).
   Use the existing MuJoCo / URLab pipeline and its model and contact audits.
 - Reward penalty weights (torque², joint angular velocity², action rate, foot slip) and curriculum thresholds live in
